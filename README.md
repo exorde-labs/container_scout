@@ -3,10 +3,6 @@
 ## Introduction
 ContainerScout is a dynamic Docker container discovery service designed to integrate seamlessly with Prometheus for real-time monitoring of containerized applications.
 
-## Prerequisites
-Before you begin, ensure you have met the following requirements:
-- Docker and Docker Compose are installed on your system.
-
 ## Installation
 To install ContainerScout, follow these steps:
 
