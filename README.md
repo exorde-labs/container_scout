@@ -1,7 +1,7 @@
 # ContainerScout
 
 ## Introduction
-ContainerScout is a dynamic Docker container discovery service designed to integrate seamlessly with Prometheus for real-time monitoring of containerized applications. By leveraging the aiohttp framework, ContainerScout efficiently fetches and exposes the current state of Docker containers, enabling Prometheus to automatically discover and monitor new or removed containers without manual configuration.
+ContainerScout is a dynamic Docker container discovery service designed to integrate seamlessly with Prometheus for real-time monitoring of containerized applications.
 
 ## Prerequisites
 Before you begin, ensure you have met the following requirements:
