@@ -7,59 +7,67 @@ orchestration_label = "network.exorde.orchestration_managed"
 
 
 def build_container_conciliator():
-    online_state_map = {}
-    label_filter = {'label': orchestration_label}
     image_prefix = "exordelabs"  # Prefix to convert module names to image names
 
     async def reconcile_containers(desired_state):
         logging.info("reconcile loop")
-        nonlocal online_state_map
         client = docker.from_env()
 
         # Retrieve all containers with our specific label
+        label_filter = {'label': orchestration_label}
         current_containers = client.containers.list(filters=label_filter, all=True)
         logging.info(f"current containers: {current_containers}")
 
-        # Update online_state_map to reflect the current state grouped by module
-        online_state_map.clear()
+        online_state_map = {}
         for container in current_containers:
             module_label_value = container.labels.get(orchestration_label)
             if module_label_value:
                 online_state_map.setdefault(module_label_value, []).append(container)
-        
+
         logging.info(f"desired state: {desired_state}")
+
         for module, desired_count in desired_state.items():
+            # Image name construction for the specific module
+            image_name = f"{image_prefix}/spot{module}:latest"
+
+            # Explicitly pull the latest version of the image
+            pulled_image = client.images.pull(image_name)
+            logging.info(f"Pulled image {image_name} with digest {pulled_image.attrs['RepoDigests']}")
+
             current_containers = online_state_map.get(module, [])
             current_count = len(current_containers)
-            image_name = f"{image_prefix}/spot{module}:latest"  # Convert module to image name
-            
-            # Spawn missing containers
+
+            # Identify running containers that need to be replaced with the new version
+            containers_with_old_version = [container for container in current_containers if container.image.tags[0] != pulled_image.tags[0]]
+
+            for container in containers_with_old_version:
+                try:
+                    container.remove(force=True)
+                    logging.info(f"Removed container {container.short_id} for module {module} due to new image version")
+                    current_count -= 1
+                except Exception as e:
+                    logging.error(f"Failed to remove container {container.short_id} for module {module}: {e}")
+
+            # Spawn or remove containers based on the desired state
             if current_count < desired_count:
                 for _ in range(desired_count - current_count):
                     try:
-                        client.containers.run(image_name, labels={orchestration_label: module}, detach=True)
+                        client.containers.run(
+                            image_name, labels={orchestration_label: module}, network="exorde-network", detach=True
+                        )
                         logging.info(f"Spawned new container for module {module} using image {image_name}")
-                    except Exception as e:  # Adjusted to catch all exceptions for simplicity
+                    except Exception as e:
                         logging.error(f"Failed to spawn container for module {module}: {e}")
-            
-            # Remove excess containers
             elif current_count > desired_count:
-                for container in current_containers[desired_count:]:
+                excess_containers = current_containers[desired_count:]
+                for container in excess_containers:
                     try:
                         container.remove(force=True)
-                        logging.info(f"Removed excess container for module {module}")
+                        logging.info(f"Removed excess container {container.short_id} for module {module}")
                     except Exception as e:
-                        logging.error(f"Error removing container for module {module}: {e}")
-
-            containers = client.containers.list(filters={'label': orchestration_label, 'ancestor': image_name}, all=True)
-            for container in containers:
-                logs = container.logs().decode('utf-8')
-                status = container.status
-                exit_code = container.attrs['State']['ExitCode']
-                logging.info(f"Logs for container {container.short_id}: {logs}")
-                logging.info(f"Status: {status}, Exit Code: {exit_code}")
-
+                        logging.error(f"Error removing excess container {container.short_id} for module {module}: {e}")
     return reconcile_containers
+
 reconcile_containers = build_container_conciliator()
 
 async def get_desired_state():
@@ -99,12 +107,29 @@ async def get_desired_state():
 
     return adjusted_module_containers
 
+async def delete_all_managed_containers():
+    """
+    In order to sanitize the state, we delete every container that are managed
+    by the orchestration label
+    """
+    logging.info("Deleting all containers managed by our label...")
+    client = docker.from_env()
+    managed_containers = client.containers.list(filters={'label': orchestration_label}, all=True)
+    
+    for container in managed_containers:
+        try:
+            container.remove(force=True)
+            logging.info(f"Deleted container: {container.short_id}")
+        except Exception as e:
+            logging.error(f"Failed to delete container: {container.short_id}, Error: {e}")
+
 
 async def orchestration_task():
     refresh_time = int(os.getenv("REFRESH_TIME", "3600"))  # Refresh time in seconds
     last_refresh = datetime.datetime.now()  # Track the last refresh time
     desired_state = await get_desired_state()
     logging.info(f"orchestration start : {desired_state}")
+    await delete_all_managed_containers()
 
     while True:
         logging.info("orchestration loop")

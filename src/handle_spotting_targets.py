@@ -14,7 +14,7 @@ async def fetch_ips_by_label(filter_key, filter_value):
             if networks:
                 for network_details in networks.values():
                     if 'IPAddress' in network_details and network_details['IPAddress']:
-                        ips.append(network_details['IPAddress'])
+                        ips.append(f"http://{network_details['IPAddress']}:8000")
                         break  # Assuming you want just one IP per container
     logging.info("IPs fetched successfully.")
     return ips
