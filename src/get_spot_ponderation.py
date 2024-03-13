@@ -33,7 +33,7 @@ async def _get_ponderation() -> Ponderation:
             specific_modules_parameters = json_data[
                 "specific_modules_parameters"
             ]
-            weights = json_data["weights"]
+            weights = json_data["_weights"]
             return Ponderation(
                 enabled_modules=enabled_modules,
                 generic_modules_parameters=generic_modules_parameters,

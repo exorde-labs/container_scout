@@ -78,24 +78,6 @@ async def get_desired_state():
     logging.info('Getting a new state')
     ponderation = await get_ponderation()
     weights = ponderation.weights
-    weights = {
-      "ap98j3envoubi3fco1kc":20,
-      "youtube00e1f862e5eff":20,
-      "a7df32de3a60dfdb7a0b":10,
-      "ch4875eda56be56000ac":10,
-      "lemmyw04b6eb792ca4a1":6,
-      "rss007d0675444aa13fc":8,
-      "jvc8439846094ced03ff":5,
-      "forocoches86019fc2d4":5,
-      "masto65ezfd86424f69a":5,
-      "bitcointalk4de40ec26":3,
-      "wei223be19ab11e891bo":2,
-      "hackbc9419ab11eebe56":2,
-      "tradview251ae30a11ee":2,
-      "followinc645fc950d7f":1,
-      "seekingalphad89ba32s":1,
-      "nostr5fa856e7234fbee":0
-    }
     amount_of_containers = int(os.getenv("ORCHESTRATE", 0))
     logging.info(f"Amount of containers to manage : {amount_of_containers}")
 

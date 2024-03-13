@@ -42,8 +42,8 @@ jobs:
             linux/arm64
           push: true
           tags: |
-            exordelabs/container_scout:${{ github.event.release.tag_name || github.ref }}
-            exordelabs/container_scout:latest
+            exordelabs/orchestrator:${{ github.event.release.tag_name || github.ref }}
+            exordelabs/orchestrator:latest
 
       - name: Send a message to slack if CI has succeeded
         if: ${{ success() }}
