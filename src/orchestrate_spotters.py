@@ -4,6 +4,7 @@ from aiohttp import web
 from get_spot_ponderation import get_ponderation
 
 orchestration_label = "network.exorde.orchestration_managed"
+monitoring_label = "network.exorde.monitor"
 
 
 def build_container_conciliator():
@@ -53,7 +54,10 @@ def build_container_conciliator():
                 for _ in range(desired_count - current_count):
                     try:
                         client.containers.run(
-                            image_name, labels={orchestration_label: module}, network="exorde-network", detach=True
+                            image_name, labels={
+                                orchestration_label: module,
+                                monitoring_label: "true"
+                            }, network="exorde-network", detach=True
                         )
                         logging.info(f"Spawned new container for module {module} using image {image_name}")
                     except Exception as e:
@@ -74,8 +78,27 @@ async def get_desired_state():
     logging.info('Getting a new state')
     ponderation = await get_ponderation()
     weights = ponderation.weights
+    weights = {
+      "ap98j3envoubi3fco1kc":20,
+      "youtube00e1f862e5eff":20,
+      "a7df32de3a60dfdb7a0b":10,
+      "ch4875eda56be56000ac":10,
+      "lemmyw04b6eb792ca4a1":6,
+      "rss007d0675444aa13fc":8,
+      "jvc8439846094ced03ff":5,
+      "forocoches86019fc2d4":5,
+      "masto65ezfd86424f69a":5,
+      "bitcointalk4de40ec26":3,
+      "wei223be19ab11e891bo":2,
+      "hackbc9419ab11eebe56":2,
+      "tradview251ae30a11ee":2,
+      "followinc645fc950d7f":1,
+      "seekingalphad89ba32s":1,
+      "nostr5fa856e7234fbee":0
+    }
     amount_of_containers = int(os.getenv("ORCHESTRATE", 0))
-    
+    logging.info(f"Amount of containers to manage : {amount_of_containers}")
+
     # Calculate the total weight
     total_weight = sum(weights.values())
 
@@ -83,6 +106,7 @@ async def get_desired_state():
     module_containers_intended = {
         module: (weight / total_weight) * amount_of_containers for module, weight in weights.items()
     }
+    logging.info(f"module_containers_intended : {module_containers_intended}")
 
     # Adjust for rounding issues to ensure the sum of allocated containers matches the amount_of_containers exactly
     # This can be done by distributing rounding errors
@@ -103,11 +127,10 @@ async def get_desired_state():
 
     # Ensure the counts are integers
     adjusted_module_containers = {module: round(count) for module, count in module_containers.items()}
-    adjusted_module_containers = {"hackbc9419ab11eebe56": 1}
-
+    logging.info(adjusted_module_containers)
     return adjusted_module_containers
 
-async def delete_all_managed_containers():
+async def delete_all_managed_containers(app):
     """
     In order to sanitize the state, we delete every container that are managed
     by the orchestration label
@@ -115,7 +138,7 @@ async def delete_all_managed_containers():
     logging.info("Deleting all containers managed by our label...")
     client = docker.from_env()
     managed_containers = client.containers.list(filters={'label': orchestration_label}, all=True)
-    
+    logging.info('Shutting down managed containers')
     for container in managed_containers:
         try:
             container.remove(force=True)
@@ -123,13 +146,12 @@ async def delete_all_managed_containers():
         except Exception as e:
             logging.error(f"Failed to delete container: {container.short_id}, Error: {e}")
 
-
-async def orchestration_task():
+async def orchestration_task(app):
     refresh_time = int(os.getenv("REFRESH_TIME", "3600"))  # Refresh time in seconds
     last_refresh = datetime.datetime.now()  # Track the last refresh time
     desired_state = await get_desired_state()
     logging.info(f"orchestration start : {desired_state}")
-    await delete_all_managed_containers()
+    await delete_all_managed_containers(app)
 
     while True:
         logging.info("orchestration loop")
@@ -145,8 +167,8 @@ async def orchestration_task():
 
         await reconcile_containers(desired_state)
         # Wait for a short interval before checking again
-        await asyncio.sleep(5)  # Adjust this sleep time as needed
+        await asyncio.sleep(60)  # Adjust this sleep time as needed
 
 
 async def start_orchestrator(app: web.Application):
-    app.loop.create_task(orchestration_task())
+    app.loop.create_task(orchestration_task(app))

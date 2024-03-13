@@ -29,5 +29,3 @@ async def handle_ips_by_label(request):
         return web.json_response(ips)
     else:
         return web.json_response({"error": "No filter provided"}, status=400)
-
-

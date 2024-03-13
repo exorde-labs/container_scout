@@ -14,4 +14,4 @@ COPY ./src/* /usr/src/app
 EXPOSE 8080
 
 # Run app.py when the container launches
-CMD ["python3.10", "/usr/src/app/app.py"]
+ENTRYPOINT ["python3.10", "/usr/src/app/app.py"]
