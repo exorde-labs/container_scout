@@ -1,84 +1,74 @@
-import asyncio, logging, docker, os, datetime
+import asyncio, logging, os, datetime
+import docker
+from aiodocker import Docker
 from aiohttp import web
-
 from get_spot_ponderation import get_ponderation
 
-orchestration_label = "network.exorde.orchestration_managed"
+orchestration_label = "network.exorde.orchestrate"
 monitoring_label = "network.exorde.monitor"
 
 
 def build_container_conciliator():
     image_prefix = "exordelabs"  # Prefix to convert module names to image names
-
     async def reconcile_containers(desired_state):
+        client = Docker()
         logging.info("reconcile loop")
-        client = docker.from_env()
+        
+        # Fetch all managed containers
+        containers = await client.containers.list(
+            filters={"label": ["network.exorde.orchestrate=spotter"]}
+        )
 
-        # Retrieve all containers with our specific label
-        label_filter = {'label': orchestration_label}
-        current_containers = client.containers.list(filters=label_filter, all=True)
-        logging.info(f"current containers: {current_containers}")
-
-        online_state_map = {}
-        for container in current_containers:
-            module_label_value = container.labels.get(orchestration_label)
-            if module_label_value:
-                online_state_map.setdefault(module_label_value, []).append(container)
-
-        logging.info(f"desired state: {desired_state}")
-
-        for module, desired_count in desired_state.items():
-            # Image name construction for the specific module
-            image_name = f"{image_prefix}/spot{module}:latest"
-
-            # Explicitly pull the latest version of the image
-            pulled_image = client.images.pull(image_name)
-            logging.info(f"Pulled image {image_name} with digest {pulled_image.attrs['RepoDigests']}")
-
-            current_containers = online_state_map.get(module, [])
+        logging.info(f"desired_state: {desired_state}")
+        logging.info(f"found {len(containers)} containers")
+        
+        # Organize containers by their image prefix
+        current_state = {}
+        for container in containers:
+            container_details = await container.show()
+            image_name = container_details['Config']['Image']
+            base_image_name = image_name.replace(f"{image_prefix}/spot", "")
+            
+            if base_image_name in current_state:
+                current_state[base_image_name].append(container)
+            else:
+                current_state[base_image_name] = [container]
+        
+        # Reconcile containers
+        for image, desired_count in desired_state.items():
+            prefixed_image = f"{image_prefix}/spot{image}"  # Apply prefix to image name
+            current_containers = current_state.get(image, [])
             current_count = len(current_containers)
-
-            # Identify running containers that need to be replaced with the new version
-            containers_with_old_version = [container for container in current_containers if container.image.tags[0] != pulled_image.tags[0]]
-
-            for container in containers_with_old_version:
-                try:
-                    container.remove(force=True)
-                    logging.info(f"Removed container {container.short_id} for module {module} due to new image version")
-                    current_count -= 1
-                except Exception as e:
-                    logging.error(f"Failed to remove container {container.short_id} for module {module}: {e}")
-
-            # Spawn or remove containers based on the desired state
+            
             if current_count < desired_count:
+                # Start new containers
                 for _ in range(desired_count - current_count):
-                    try:
-                        client.containers.run(
-                            image_name, labels={
-                                orchestration_label: module,
-                                monitoring_label: "true"
-                            }, network="exorde-network", detach=True
-                        )
-                        logging.info(f"Spawned new container for module {module} using image {image_name}")
-                    except Exception as e:
-                        logging.error(f"Failed to spawn container for module {module}: {e}")
+                    logging.info(f"Starting new container for image {prefixed_image}...")
+                    container = await client.containers.create_or_replace(
+                        config={"Image": prefixed_image, "Labels": {"network.exorde.orchestrate": "spotter"}},
+                        name=f"{image_prefix}_{image}_{current_count + _}"
+                    )
+                    await container.start()
             elif current_count > desired_count:
-                excess_containers = current_containers[desired_count:]
-                for container in excess_containers:
-                    try:
-                        container.remove(force=True)
-                        logging.info(f"Removed excess container {container.short_id} for module {module}")
-                    except Exception as e:
-                        logging.error(f"Error removing excess container {container.short_id} for module {module}: {e}")
-    return reconcile_containers
+                # Stop and remove extra containers
+                extra_containers = current_containers[desired_count:]
+                for container in extra_containers:
+                    logging.info(f"Stopping and removing container {container.id} for image {prefixed_image}...")
+                    await container.stop()
+                    await container.delete()
 
+        await client.close()
+
+
+    return reconcile_containers
 reconcile_containers = build_container_conciliator()
 
-async def get_desired_state():
+
+async def get_desired_state() -> dict[str, int]:
     logging.info('Getting a new state')
     ponderation = await get_ponderation()
     weights = ponderation.weights
-    amount_of_containers = int(os.getenv("ORCHESTRATE", 0))
+    amount_of_containers = int(os.getenv("SPOTTERS_AMOUNT", 0))
     logging.info(f"Amount of containers to manage : {amount_of_containers}")
 
     # Calculate the total weight
@@ -108,8 +98,9 @@ async def get_desired_state():
                     break
 
     # Ensure the counts are integers
-    adjusted_module_containers = {module: round(count) for module, count in module_containers.items()}
-    logging.info(adjusted_module_containers)
+    adjusted_module_containers = {
+        module: round(count) for module, count in module_containers.items()
+    }
     return adjusted_module_containers
 
 async def delete_all_managed_containers(app):
@@ -149,7 +140,7 @@ async def orchestration_task(app):
 
         await reconcile_containers(desired_state)
         # Wait for a short interval before checking again
-        await asyncio.sleep(60)  # Adjust this sleep time as needed
+        await asyncio.sleep(5)  # Adjust this sleep time as needed
 
 
 async def start_orchestrator(app: web.Application):

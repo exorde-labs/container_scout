@@ -1,7 +1,7 @@
 FROM python:3.10-slim as base
 
 # Install any needed packages specified in requirements.txt
-RUN pip install --no-cache-dir aiohttp docker 
+RUN pip install --no-cache-dir aiohttp docker aiodocker
 
 FROM base as with_code
 

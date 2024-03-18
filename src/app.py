@@ -33,5 +33,5 @@ else:
     logging.info('NOT running orchestration')
 
 if __name__ == '__main__':
-    logging.info("Starting ContainerScout service on port 8000...")
+    logging.info("Starting Orchestrator service on port 8000...")
     web.run_app(app, port=8000, handle_signals=True)
