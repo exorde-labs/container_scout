@@ -170,16 +170,16 @@ async def recreate_container(
     docker, container, module_digest_map, last_pull_times
 ):
     """Recreates a container asynchronously."""
-    container_id = container.id 
+    logging.info(f"Recreating container {container.id}")
     details = await container.show()
     config = details["Config"]
-    if config['Image'] == "exordelabs/orchestrator":
+    if "exordelabs/orchestrator" in config['Image']:
+        logging.info("going to update the orchestrator instance")
         await update_orchestrator(
             container, details, module_digest_map, last_pull_times
         )
-        await asyncio.sleep(60*2) # pause this after self update trigger
         return
-    logging.info(f"Recreating container {container_id}")
+    logging.info(f"Recreating container {container.id}")
     logging.info(f"{json.dumps(details, indent=4)}")
 
     new_container = await docker.containers.create_or_replace(
@@ -190,55 +190,59 @@ async def recreate_container(
 
 def build_update_function(delay: int, validity_threshold_seconds: int):
     """
-    Builds and returns an asynchronous function to update containers with 
-    specified delay and validity threshold for image pulls.
+    Builds and returns an asynchronous function that updates containers.
+    For each unique image, a single pull operation is performed if needed,
+    followed by updates to all containers using that image.
     """
     images_to_update = {}
-    
-    preloaded_last_pull_times = os.getenv('LAST_PULL_TIMES', '')
-    if preloaded_last_pull_times != '':
-        last_pull_times = json.loads(preloaded_last_pull_times)
-    else:
-        last_pull_times = {}
+    last_pull_times = json.loads(os.getenv('LAST_PULL_TIMES', '{}'))
 
     async def pull_image_if_needed(docker, image):
         """Pulls a Docker image if it hasn't been pulled recently."""
         now = datetime.now()
-        if (
-            image not in last_pull_times or 
-            now - last_pull_times[image] > timedelta(
-                seconds=validity_threshold_seconds
-            )
-        ):
+        if image not in last_pull_times or (now - last_pull_times[image]).total_seconds() > validity_threshold_seconds:
             logging.info(f"Pulling image {image}...")
-            await docker.images.pull(image)
+            await docker.images.pull(image)  # Assuming docker.images.pull is an awaitable operation
             logging.info(f"Image {image} pulled.")
             last_pull_times[image] = now
-        else:
-            logging.info(f"Image {image} pull skipped due to recent pull.")
+            return True
+        logging.info(f"Image {image} pull skipped due to recent pull.")
+        return False
+
+    async def update_containers(docker, image, containers, module_digest_map):
+        """Updates all containers for a given image."""
+        for container in containers:
+            # Delay before updating the next container to avoid simultaneous downtime
+            await asyncio.sleep(delay)
+            await recreate_container(docker, container, module_digest_map, last_pull_times)
+
+    async def handle_image_update(image, containers, module_digest_map):
+        """Handles updating of containers for a specific image."""
+        async with Docker() as docker:
+            pulled = await pull_image_if_needed(docker, image)
+            if pulled:
+                await update_containers(docker, image, containers, module_digest_map)
 
     async def schedule_update(container, image: str, module_digest_map):
         """
-        Schedules an update for a container, ensuring the image is pulled only 
-        once within the validity window.
+        Schedules an update for a container, ensuring that for each unique image,
+        the pull operation is performed only once, followed by updates to all containers
+        using that image.
         """
         if image not in images_to_update:
-            images_to_update[image] = []
-        images_to_update[image].append(container)
+            images_to_update[image] = [container]
+        else:
+            images_to_update[image].append(container)
 
-        # Pull and recreate immediately within the context of scheduling 
-        # to honor delay and validity
-        async with Docker() as docker:
-            await pull_image_if_needed(docker, image)
-            await asyncio.sleep(delay)  # Delay before recreating the container
-            await recreate_container(
-                docker, container, module_digest_map, last_pull_times
-            )
+        # Check if this is the first container for the image to schedule the task
+        if len(images_to_update[image]) == 1:
+            asyncio.create_task(handle_image_update(image, images_to_update[image], module_digest_map))
 
     return schedule_update
+
 # Example usage:
 schedule_update = build_update_function(
-    delay=120, validity_threshold_seconds=30
+    delay=5, validity_threshold_seconds=30
 )
 
 def build_updater():
