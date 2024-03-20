@@ -46,6 +46,9 @@ async def test_get_container_details():
 
     details = await container.show()
 
+    await container.stop()
+    await container.delete()
+
     logging.info(json.dumps(details, indent=4))
 
 
