@@ -186,4 +186,5 @@ async def update_task(app):
 
 
 async def start_update_task(app: web.Application):
+    await asyncio.sleep(30) # to let other container start
     app.loop.create_task(update_task(app))
