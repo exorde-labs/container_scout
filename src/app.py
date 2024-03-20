@@ -34,7 +34,7 @@ def handle_signal(app, loop, signame):
 
 # AUTOMATIC UPDATE
 if os.getenv("AUTOMATIC_UPDATE", True):
-    logging.info("Will pull images and shutdown out-of-date containers")
+    logging.info("Will pull images and update out-of-date containers")
     app.on_startup.append(start_update_task)
 
 # SPOTTERS ORCHESTRATION

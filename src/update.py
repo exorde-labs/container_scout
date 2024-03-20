@@ -265,40 +265,32 @@ schedule_update = build_update_function(
     delay=5, validity_threshold_seconds=30
 )
 
-def build_updater():
-    preloaded_module_digest_map = os.getenv('MODULE_DIGEST_MAP', '')
-    if preloaded_module_digest_map != '':
-        module_digest_map = json.loads(preloaded_module_digest_map)
-    else:
-        module_digest_map = {}
-    async def enforce_versioning(client):
-        """
-        1. retrieve the latest digest for each currently running container 
-            (module_digest_map)
-        2. if a digest is different in current module_digest_map (or empty) 
-            -> trigger update for that container
-        3. update module_digest_map
-        """
-        logging.info("Enforcing versioning")
-        nonlocal module_digest_map
+def build_updater():                                                            
+    preloaded_module_digest_map = os.getenv('MODULE_DIGEST_MAP', '')            
+    if preloaded_module_digest_map != '':                                       
+        module_digest_map = json.loads(preloaded_module_digest_map)             
+    else:                                                                       
+        module_digest_map = {}                                                  
+    async def enforce_versioning(client):                                        
+        logging.info("Enforcing versioning")                                    
+        nonlocal module_digest_map                                               
         containers_to_watch = await retrieve_list_of_containers_to_watch(client)
-        containers_and_images = await images_of_containers(containers_to_watch)
-        images = [img for img in containers_and_images]
-        logging.info(f"Looking at {len(images)} images")
-        latest_digests = await get_digests_for_imgs(images)
+        containers_and_images = await images_of_containers(containers_to_watch)  
+        images = [img for img in containers_and_images]                          
+        logging.info(f"Looking at {len(images)} images")                        
+        latest_digests = await get_digests_for_imgs(images)  
 
-        for container, img in containers_and_images:
-            latest_digest = latest_digests[img]
-            current_digest = module_digest_map.get(container, None)
+        for container, img in containers_and_images:                            
+            latest_digest = latest_digests[img]                                 
+            current_digest = module_digest_map.get(img, None)                   
 
-            # If digest is different or container is not in module_digest_map, trigger update
-            if current_digest is None or current_digest != latest_digest:
-                logging.info(f"Scheduling an update for {img}")
-                await schedule_update(container, img, module_digest_map)
-                # Update the module_digest_map with the latest digest
-                module_digest_map[container] = latest_digest
-        logging.info("Versioning loop complete")
-    return enforce_versioning
+            if current_digest is None or current_digest != latest_digest:       
+                logging.info(f"Scheduling an update for {img}")                 
+                await schedule_update(container, img, latest_digest)            
+                module_digest_map[img] = latest_digest                    
+
+        logging.info("Versioning loop complete")                                
+    return enforce_versioning 
 enforce_versioning = build_updater()
 
 async def update_task(app):
