@@ -179,8 +179,8 @@ async def recreate_container(
             container, details, module_digest_map, last_pull_times
         )
         return
-    logging.info(f"Recreating container {container.id}")
-    logging.info(f"{json.dumps(details, indent=4)}")
+    logging.info(f"Recreating container {container.id} ({config['Image']})")
+    # logging.info(f"{json.dumps(details, indent=4)}")
 
     new_container = await docker.containers.create_or_replace(
         name=details['Name'][1:], config=config
