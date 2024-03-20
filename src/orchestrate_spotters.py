@@ -45,7 +45,10 @@ def build_container_conciliator():
                 for _ in range(desired_count - current_count):
                     logging.info(f"Starting new container for image {prefixed_image}...")
                     container = await client.containers.create_or_replace(
-                        config={"Image": prefixed_image, "Labels": {"network.exorde.orchestrate": "spotter"}},
+                        config={"Image": prefixed_image, "Labels": {
+                            "network.exorde.orchestrate": "spotter",
+                            "network.exorde.monitor": "true"
+                        }},
                         name=f"{image_prefix}_{image}_{current_count + _}"
                     )
                     await container.start()
@@ -58,8 +61,6 @@ def build_container_conciliator():
                     await container.delete()
 
         await client.close()
-
-
     return reconcile_containers
 reconcile_containers = build_container_conciliator()
 
@@ -120,7 +121,7 @@ async def delete_all_managed_containers(app):
             logging.error(f"Failed to delete container: {container.short_id}, Error: {e}")
 
 async def orchestration_task(app):
-    refresh_time = int(os.getenv("REFRESH_TIME", "3600"))  # Refresh time in seconds
+    refresh_time = int(os.getenv("SPOTTERS_TIME_WINDOW", "3600"))  # Refresh time in seconds
     last_refresh = datetime.datetime.now()  # Track the last refresh time
     desired_state = await get_desired_state()
     logging.info(f"orchestration start : {desired_state}")
