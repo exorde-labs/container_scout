@@ -84,4 +84,4 @@ async def test_update():
 
     # enforce_versioning should recreate containers after a pull
     containers_to_watch = await retrieve_list_of_containers_to_watch(client)
-    assert len(containers_to_watch) == 0
+    assert len(containers_to_watch) == 2

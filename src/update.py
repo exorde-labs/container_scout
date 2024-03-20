@@ -178,6 +178,7 @@ async def update_orchestrator(
     new_configuration['Env'].append(
         f"MODULE_DIGEST_MAP={json.dumps(module_digest_map)}"
     )
+    new_configuration['HostConfig'] = details['HostConfig']
     logging.info(
         f"new orchestrator configuration is : \n{json.dumps(new_configuration)}"
     )
@@ -213,12 +214,12 @@ async def recreate_container(
     if "exordelabs/orchestrator" in config['Image']:
         logging.info("going to update the orchestrator instance")
         await update_orchestrator(
-            container, details, module_digest_map, last_pull_times
+            container, details, module_digest_map, last_pull_times 
         )
         return
     logging.info(f"Recreating container {container.id} ({config['Image']})")
     # logging.info(f"{json.dumps(details, indent=4)}")
-
+    config['HostConfig'] = details['HostConfig']
     new_container = await docker.containers.create_or_replace(
         name=details['Name'][1:], config=config
     )
