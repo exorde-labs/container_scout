@@ -73,9 +73,20 @@ async def images_of_containers(containers):
     return list(set(r))
 
 async def get_digests_for_imgs(imgs: list[str]):
-    digests = await asyncio.gather(*[get_image_manifest(image) for __container__, image in imgs])
-    return { img: digest for (img, digest) in digests }
+    async def safe_get_image_manifest(image):
+        try:
+            result = await get_image_manifest(image)
+            return image, result
+        except Exception as e:
+            logging.exception(f"getting manifest for {image}: {e}")
+            return image, None
 
+    results = await asyncio.gather(*[safe_get_image_manifest(image) for __container__, image in imgs])
+    
+    # Filter out None results
+    filtered_results = filter(lambda x: x[1] is not None, results)
+    
+    return {img: digest for img, digest in filtered_results}
 
 def build_update_function(delay: int, validity_threshold_seconds: int):
     """Builds and returns an asynchronous function to update containers with specified delay and validity threshold for image pulls."""
@@ -126,6 +137,7 @@ def build_updater():
         2. if a digest is different in current module_digest_map (or empty) -> trigger update for that container
         3. update module_digest_map
         """
+        logging.info("Enforcing versioning")
         nonlocal module_digest_map
         containers_to_watch = await retrieve_list_of_containers_to_watch(client)
         containers_and_images = await images_of_containers(containers_to_watch)

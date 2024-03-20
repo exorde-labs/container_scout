@@ -4,8 +4,8 @@ from aiohttp import web
 
 async def fetch_docker_targets():
     logging.info("Fetching Docker targets...")
-    # Fetch and parse the FILTER environment variable
-    filter_env = os.getenv('FILTER', '')  # Example format: "com.example.department:IT"
+    # Fetch and parse the PROMETHEUS_TARGET_DISCOVERY_LABEL environment variable
+    filter_env = os.getenv('PROMETHEUS_TARGET_DISCOVERY_LABEL', '')  # Example format: "com.example.department:IT"
     filter_key, filter_value = filter_env.split(':', 1) if ':' in filter_env else (None, None)
 
     client = docker.from_env()

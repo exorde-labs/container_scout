@@ -121,7 +121,7 @@ async def delete_all_managed_containers(app):
             logging.error(f"Failed to delete container: {container.short_id}, Error: {e}")
 
 async def orchestration_task(app):
-    refresh_time = int(os.getenv("REFRESH_TIME", "3600"))  # Refresh time in seconds
+    refresh_time = int(os.getenv("SPOTTERS_TIME_WINDOW", "3600"))  # Refresh time in seconds
     last_refresh = datetime.datetime.now()  # Track the last refresh time
     desired_state = await get_desired_state()
     logging.info(f"orchestration start : {desired_state}")

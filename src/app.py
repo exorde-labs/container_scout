@@ -18,21 +18,29 @@ logging.basicConfig(
 )
 
 app = web.Application()
+
+# DYNAMIC PROMETHEUS TARGETS
 app.add_routes([web.get('/targets', handle_targets)])
+
+# SOFTWARE ORCHESTRATION (eg give me a `upipe`)
 app.add_routes([web.get('/get', handle_ips_by_label)])
 
+# SHUTDOWN
 def handle_signal(app, loop, signame):
     logging.info(f"Received signal {signame}, gracefully shutting down...")
     loop.create_task(app.shutdown())
 
-ORCHESTRATE = os.getenv("ORCHESTRATE", False)
-if int(ORCHESTRATE):
-    logging.info(f"running orchestration : {ORCHESTRATE}")
-    app.on_startup.append(start_orchestrator)
+# AUTOMATIC UPDATE
+if os.getenv("AUTOMATIC_UPDATE", True):
+    logging.info("Will pull images and shutdown out-of-date containers")
     app.on_startup.append(start_update_task)
+
+# SPOTTERS ORCHESTRATION
+SPOTTERS_AMOUNT = os.getenv("SPOTTERS_AMOUNT", 0)
+logging.info(f"running {SPOTTERS_AMOUNT} spotters")
+if int(SPOTTERS_AMOUNT):
+    app.on_startup.append(start_orchestrator)
     app.on_shutdown.append(delete_all_managed_containers)
-else:
-    logging.info('NOT running orchestration')
 
 if __name__ == '__main__':
     logging.info("Starting Orchestrator service on port 8000...")
