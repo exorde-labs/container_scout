@@ -161,12 +161,12 @@ async def update_orchestrator(
         else we increment the number
         """
         # Check if the existing name ends with a numerical suffix
-        if "_" in existing_name and existing_name.rsplit("-", 1)[1].isdigit():
+        if "-" in existing_name and existing_name.rsplit("-", 1)[1].isdigit():
             # Split the name from the number and increment the number
             name_part, number_part = existing_name.rsplit("-", 1)
             new_name = f"{name_part}-{int(number_part) + 1}"
         else:
-            # If no numerical suffix, append '_1'
+            # If no numerical suffix, append '-1'
             new_name = f"{existing_name}-1"
         
         return new_name
@@ -178,16 +178,19 @@ async def update_orchestrator(
     new_configuration['Env'].append(
         f"MODULE_DIGEST_MAP={json.dumps(module_digest_map)}"
     )
-
+    logging.info(
+        f"new orchestrator configuration is : \n{json.dumps(new_configuration)}"
+    )
     # Custom serializer for datetime objects
     def datetime_serializer(obj):
         if isinstance(obj, datetime):
             return obj.isoformat()
         raise TypeError("Type not serializable")
 
-
     new_configuration['Env'].append(
-        f"LAST_PULL_TIMES={json.dumps(last_pull_times, default=datetime_serializer)}"
+        f"LAST_PULL_TIMES={
+            json.dumps(last_pull_times, default=datetime_serializer)
+        }"
     )
     new_configuration['Env'].append(
         f"CLOSE_CONTAINER_ID={existing_container.id}"
