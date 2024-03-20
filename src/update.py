@@ -108,9 +108,21 @@ async def close_parent_container(app):
     
     docker = Docker()
     existing_container = await docker.containers.get(CLOSE_CONTAINER_ID)
+
+    new_container_host_config = json.loads(os.getenv("NEW_CONTAINER_HOST_CONFIG", "{}"))
+    details = await existing_container.show()
+    config = dict(details['Config'])
+    config['HostConfig'] = new_container_host_config
+    new_container = await docker.containers.create_or_replace(
+        name=details['Name'][1:].replace("-temp", ""),
+        config=config
+    )
+    await new_container.start()
+
     await existing_container.stop()
     await existing_container.delete()
     await docker.close()
+    os._exit(0)
 
 
 async def update_orchestrator(
@@ -145,31 +157,6 @@ async def update_orchestrator(
     conflicting orch.
     """
 
-    def increment_name(existing_name:str) -> str:
-        """
-        We cannot use the same name because two containers have to live at the
-        same time.
-        We embrace the problem by adding a incrementation marker. This let
-        users know how many times the service has updated.
-
-        The format is
-            `{image_name}_number`
-
-        if there is no `_number` we start at 1 which should result in
-            `{image_name}_1`
-
-        else we increment the number
-        """
-        # Check if the existing name ends with a numerical suffix
-        if "-" in existing_name and existing_name.rsplit("-", 1)[1].isdigit():
-            # Split the name from the number and increment the number
-            name_part, number_part = existing_name.rsplit("-", 1)
-            new_name = f"{name_part}-{int(number_part) + 1}"
-        else:
-            # If no numerical suffix, append '-1'
-            new_name = f"{existing_name}-1"
-        
-        return new_name
 
     docker = Docker()
     existing_configuration = details["Config"]
@@ -194,8 +181,11 @@ async def update_orchestrator(
     new_configuration['Env'].append(
         f"CLOSE_CONTAINER_ID={existing_container.id}"
     )
+    new_configuration['Env'].append(
+        f"NEW_CONTAINER_HOST_CONFIG={json.dumps(details['HostConfig'])}"
+    )
     new_container = await docker.containers.create_or_replace(
-        name=increment_name(details['Name'][1:]),
+        name=f"{details['Name'][1:]}-temp",
         config=new_configuration
     )
     await new_container.start()
