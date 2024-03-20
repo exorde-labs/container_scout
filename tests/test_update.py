@@ -22,6 +22,12 @@ async def test_get_docker_hub_token():
 async def test_get_image_manifest():
     image, manifests = await get_image_manifest("exordelabs/orchestrator")
     logging.info(f" {image} -> {json.dumps(manifests, indent=4)}")
+    image, manifests = await get_image_manifest("exordelabs/transactioneer")
+    logging.info(f" {image} -> {json.dumps(manifests, indent=4)}")
+    image, manifests = await get_image_manifest("exordelabs/upipe")
+    logging.info(f" {image} -> {json.dumps(manifests, indent=4)}")
+    image, manifests = await get_image_manifest("exordelabs/bpipe")
+    logging.info(f" {image} -> {json.dumps(manifests, indent=4)}")
 
 
 @pytest.mark.asyncio

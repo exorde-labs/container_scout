@@ -20,6 +20,10 @@ async def get_docker_hub_token(
 async def get_image_manifest(
     image_name: str, tag: str = "latest"
 ) -> Union[tuple[str, list[str]], None]:
+    # Step 1: Separate any tag included in the image name
+    if ':' in image_name:
+        image_name = image_name.split(':')[0]
+
     token = await get_docker_hub_token(image_name)
     headers = {
         "Accept": "application/vnd.docker.distribution.manifest.v2+json",
@@ -31,13 +35,12 @@ async def get_image_manifest(
             if response.status == 200:
                 data = await response.json()
                 result: list[str] = []
-                for manifest in data['manifests']:
+                for manifest in data.get('manifests', []):
                     if manifest.get('annotations', None):
-                        r:str = manifest["annotations"]["vnd.docker.reference.digest"]
+                        r: str = manifest["annotations"]["vnd.docker.reference.digest"]
                         result.append(r)
                 return image_name, result
             else:
-                # Corrected to access 'status' and 'reason' instead of 'error'
                 raise Exception(f"HTTP Error {response.status}: {response.reason}")
 
 
@@ -78,7 +81,7 @@ async def get_digests_for_imgs(imgs: list[str]):
             result = await get_image_manifest(image)
             return image, result
         except Exception as e:
-            logging.exception(f"getting manifest for {image}: {e}")
+            logging.exception(f"getting manifest for '{image}': {e}")
             return image, None
 
     results = await asyncio.gather(*[safe_get_image_manifest(image) for __container__, image in imgs])
