@@ -77,6 +77,7 @@ async def images_of_containers(containers):
 
 async def get_digests_for_imgs(imgs: list[str]):
     async def safe_get_image_manifest(image):
+        logging.info(f"Getting digest for {image}")
         try:
             result = await get_image_manifest(image)
             return image, result
@@ -145,6 +146,7 @@ def build_updater():
         containers_to_watch = await retrieve_list_of_containers_to_watch(client)
         containers_and_images = await images_of_containers(containers_to_watch)
         images = [img for img in containers_and_images]
+        logging.info(f"Looking at {len(images)} images")
         latest_digests = await get_digests_for_imgs(images)
 
         for container, img in containers_and_images:
