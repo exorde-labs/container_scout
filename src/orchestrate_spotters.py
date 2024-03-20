@@ -45,7 +45,10 @@ def build_container_conciliator():
                 for _ in range(desired_count - current_count):
                     logging.info(f"Starting new container for image {prefixed_image}...")
                     container = await client.containers.create_or_replace(
-                        config={"Image": prefixed_image, "Labels": {"network.exorde.orchestrate": "spotter"}},
+                        config={"Image": prefixed_image, "Labels": {
+                            "network.exorde.orchestrate": "spotter",
+                            "network.exorde.monitor": "true"
+                        }},
                         name=f"{image_prefix}_{image}_{current_count + _}"
                     )
                     await container.start()
@@ -58,8 +61,6 @@ def build_container_conciliator():
                     await container.delete()
 
         await client.close()
-
-
     return reconcile_containers
 reconcile_containers = build_container_conciliator()
 

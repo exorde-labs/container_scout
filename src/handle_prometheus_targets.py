@@ -46,5 +46,3 @@ async def handle_targets(request):
     response = web.json_response(targets)
     response.headers['Content-Type'] = 'application/json'  # Ensure correct Content-Type
     return response
-
-

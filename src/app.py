@@ -11,6 +11,7 @@ from aiohttp import web
 from handle_prometheus_targets import handle_targets
 from handle_spotting_targets import handle_ips_by_label
 from orchestrate_spotters import start_orchestrator, delete_all_managed_containers 
+from update import start_update_task
 
 logging.basicConfig(
     level=logging.INFO, format='%(asctime)s - %(levelname)s - %(message)s'
@@ -28,6 +29,7 @@ ORCHESTRATE = os.getenv("ORCHESTRATE", False)
 if int(ORCHESTRATE):
     logging.info(f"running orchestration : {ORCHESTRATE}")
     app.on_startup.append(start_orchestrator)
+    app.on_startup.append(start_update_task)
     app.on_shutdown.append(delete_all_managed_containers)
 else:
     logging.info('NOT running orchestration')
