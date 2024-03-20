@@ -11,9 +11,9 @@ from aiohttp import web
 from handle_prometheus_targets import handle_targets
 from handle_spotting_targets import handle_ips_by_label
 from orchestrate_spotters import (
-    start_orchestrator, delete_all_managed_containers, close_parent_container
+    start_orchestrator, delete_all_managed_containers
 )
-from update import start_update_task
+from update import (start_update_task, close_parent_container)
 
 logging.basicConfig(
     level=logging.INFO, format='%(asctime)s - %(levelname)s - %(message)s'

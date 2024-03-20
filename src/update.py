@@ -96,7 +96,7 @@ async def get_digests_for_imgs(imgs: list[str]):
     
     return {img: digest for img, digest in filtered_results}
 
-async def close_parent_container():
+async def close_parent_container(app):
     CLOSE_CONTAINER_ID = os.getenv("CLOSE_CONTAINER_ID", "")
     if CLOSE_CONTAINER_ID == "":
         logging.critical(
