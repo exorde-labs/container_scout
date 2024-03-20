@@ -175,9 +175,9 @@ async def update_orchestrator(
     existing_configuration = details["Config"]
     logging.info("Updating the orchestrator")
     new_configuration = dict(existing_configuration)
-    new_configuration['Env']['MODULE_DIGEST_MAP'] = json.dumps(module_digest_map)
-    new_configuration['Env']['LAST_PULL_TIMES'] = json.dumps(last_pull_times)
-    new_configuration['Env']['CLOSE_CONTAINER_ID'] = existing_container.id
+    new_configuration['Env'].append(f"MODULE_DIGEST_MAP={json.dumps(module_digest_map)}")
+    new_configuration['Env'].append(f"LAST_PULL_TIMES={json.dumps(last_pull_times)}")
+    new_configuration['Env'].append(f"CLOSE_CONTAINER_ID={existing_container.id}")
     new_container = await docker.containers.create_or_replace(
         name=increment_name(details['Name'][1:]),
         config=new_configuration

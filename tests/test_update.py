@@ -12,7 +12,6 @@ from update import (
     enforce_versioning
 )
 
-
 @pytest.mark.asyncio
 async def test_get_docker_hub_token():
     token = await get_docker_hub_token("exordelabs/orchestrator")
