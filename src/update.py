@@ -175,15 +175,31 @@ async def update_orchestrator(
     existing_configuration = details["Config"]
     logging.info("Updating the orchestrator")
     new_configuration = dict(existing_configuration)
-    new_configuration['Env'].append(f"MODULE_DIGEST_MAP={json.dumps(module_digest_map)}")
-    new_configuration['Env'].append(f"LAST_PULL_TIMES={json.dumps(last_pull_times)}")
-    new_configuration['Env'].append(f"CLOSE_CONTAINER_ID={existing_container.id}")
+    new_configuration['Env'].append(
+        f"MODULE_DIGEST_MAP={json.dumps(module_digest_map)}"
+    )
+
+    # Custom serializer for datetime objects
+    def datetime_serializer(obj):
+        if isinstance(obj, datetime):
+            return obj.isoformat()
+        raise TypeError("Type not serializable")
+
+
+    new_configuration['Env'].append(
+        f"LAST_PULL_TIMES={json.dumps(last_pull_times, default=datetime_serializer)}"
+    )
+    new_configuration['Env'].append(
+        f"CLOSE_CONTAINER_ID={existing_container.id}"
+    )
     new_container = await docker.containers.create_or_replace(
         name=increment_name(details['Name'][1:]),
         config=new_configuration
     )
     await new_container.start()
-    logging.info(f"New version at {new_container.id} started, it will take over, bye !")
+    logging.info(
+        f"New version at {new_container.id} started, it will take over, bye !"
+    )
 
 
 async def recreate_container(
@@ -207,6 +223,14 @@ async def recreate_container(
     )
     await new_container.start()
 
+# Custom deserializer for datetime objects
+def datetime_deserializer(dict_):
+    for key, value in dict_.items():
+        try:
+            dict_[key] = datetime.fromisoformat(value)
+        except (ValueError, TypeError):
+            pass  # Not a datetime string, ignore
+    return dict_
 
 def build_update_function(delay: int, validity_threshold_seconds: int):
     """
@@ -215,7 +239,10 @@ def build_update_function(delay: int, validity_threshold_seconds: int):
     followed by updates to all containers using that image.
     """
     images_to_update = {}
-    last_pull_times = json.loads(os.getenv('LAST_PULL_TIMES', '{}'))
+    last_pull_times = json.loads(
+        os.getenv('LAST_PULL_TIMES', '{}'),
+        object_hook=datetime_deserializer
+    )
 
     async def pull_image_if_needed(docker, image):
         """Pulls a Docker image if it hasn't been pulled recently."""
