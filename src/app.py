@@ -10,7 +10,9 @@ from aiohttp import web
 
 from handle_prometheus_targets import handle_targets
 from handle_spotting_targets import handle_ips_by_label
-from orchestrate_spotters import start_orchestrator, delete_all_managed_containers 
+from orchestrate_spotters import (
+    start_orchestrator, delete_all_managed_containers, close_parent_container
+)
 from update import start_update_task
 
 logging.basicConfig(
@@ -41,6 +43,10 @@ logging.info(f"running {SPOTTERS_AMOUNT} spotters")
 if int(SPOTTERS_AMOUNT):
     app.on_startup.append(start_orchestrator)
     app.on_shutdown.append(delete_all_managed_containers)
+
+CLOSE_CONTAINER_ID = os.getenv("CLOSE_CONTAINER_ID", False)
+if CLOSE_CONTAINER_ID:
+    app.on_startup.append(close_parent_container)
 
 if __name__ == '__main__':
     logging.info("Starting Orchestrator service on port 8000...")

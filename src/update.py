@@ -5,7 +5,7 @@ from aiodocker import Docker
 from aiohttp import web
 import os
 import json
-from datetime import datetime, timedelta
+from datetime import datetime
 
 async def get_docker_hub_token(
     image_name: str
@@ -96,6 +96,23 @@ async def get_digests_for_imgs(imgs: list[str]):
     
     return {img: digest for img, digest in filtered_results}
 
+async def close_parent_container():
+    CLOSE_CONTAINER_ID = os.getenv("CLOSE_CONTAINER_ID", "")
+    if CLOSE_CONTAINER_ID == "":
+        logging.critical(
+            "An error occured that should never happen, CLOSE_CONTAINER_ID is required env var of this fn"
+        )
+        os._exit(-1) # should we exit or ignore ? 
+                     # multiple orchestrators are not supported
+                     # should never happen anyway
+    
+    docker = Docker()
+    existing_container = await docker.containers.get(CLOSE_CONTAINER_ID)
+    await existing_container.stop()
+    await existing_container.delete()
+    await docker.close()
+
+
 async def update_orchestrator(
     existing_container, details, module_digest_map, last_pull_times
 ):
@@ -144,26 +161,29 @@ async def update_orchestrator(
         else we increment the number
         """
         # Check if the existing name ends with a numerical suffix
-        if "_" in existing_name and existing_name.rsplit("_", 1)[1].isdigit():
+        if "_" in existing_name and existing_name.rsplit("-", 1)[1].isdigit():
             # Split the name from the number and increment the number
-            name_part, number_part = existing_name.rsplit("_", 1)
-            new_name = f"{name_part}_{int(number_part) + 1}"
+            name_part, number_part = existing_name.rsplit("-", 1)
+            new_name = f"{name_part}-{int(number_part) + 1}"
         else:
             # If no numerical suffix, append '_1'
-            new_name = f"{existing_name}_1"
+            new_name = f"{existing_name}-1"
         
         return new_name
 
     docker = Docker()
     existing_configuration = details["Config"]
-    logging.info("RECREATE ORCHESTRATOR")
-    logging.info(existing_configuration)
-    logging.info("RECREATE ORCHESTRATOR")
+    logging.info("Updating the orchestrator")
+    new_configuration = dict(existing_configuration)
+    new_configuration['Env']['MODULE_DIGEST_MAP'] = json.dumps(module_digest_map)
+    new_configuration['Env']['LAST_PULL_TIMES'] = json.dumps(last_pull_times)
+    new_configuration['Env']['CLOSE_CONTAINER_ID'] = existing_container.id
     new_container = await docker.containers.create_or_replace(
         name=increment_name(details['Name'][1:]),
-        config=existing_configuration
+        config=new_configuration
     )
     await new_container.start()
+    logging.info(f"New version at {new_container.id} started, it will take over, bye !")
 
 
 async def recreate_container(

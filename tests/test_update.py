@@ -2,6 +2,7 @@
 import logging
 from aiodocker import Docker
 import json, logging, pytest
+
 from update import (
     get_image_manifest, 
     get_docker_hub_token,
@@ -28,6 +29,24 @@ async def test_get_image_manifest():
     logging.info(f" {image} -> {json.dumps(manifests, indent=4)}")
     image, manifests = await get_image_manifest("exordelabs/bpipe")
     logging.info(f" {image} -> {json.dumps(manifests, indent=4)}")
+
+
+@pytest.mark.asyncio
+async def test_get_container_details():
+    client = Docker()
+    image = "exordelabs/orchestrator"
+    container = await client.containers.create_or_replace(
+        name="container-for-exordelabs-test",
+        config={
+        "Image": image, "Labels": {
+            "network.exorde.monitor": "true"
+        }
+    })
+    await container.start()
+
+    details = await container.show()
+
+    logging.info(json.dumps(details, indent=4))
 
 
 @pytest.mark.asyncio
