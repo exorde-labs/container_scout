@@ -188,9 +188,7 @@ async def update_orchestrator(
         raise TypeError("Type not serializable")
 
     new_configuration['Env'].append(
-        f"LAST_PULL_TIMES={
-            json.dumps(last_pull_times, default=datetime_serializer)
-        }"
+        f"LAST_PULL_TIMES={json.dumps(last_pull_times, default=datetime_serializer)}"
     )
     new_configuration['Env'].append(
         f"CLOSE_CONTAINER_ID={existing_container.id}"
