@@ -155,10 +155,11 @@ def build_updater():
 
             # If digest is different or container is not in module_digest_map, trigger update
             if current_digest is None or current_digest != latest_digest:
+                logging.info(f"Scheduling an update for {img}")
                 await schedule_update(container, img)
                 # Update the module_digest_map with the latest digest
                 module_digest_map[container] = latest_digest
-
+        logging.info("Versioning loop complete")
     return enforce_versioning
 enforce_versioning = build_updater()
 
