@@ -17,7 +17,6 @@ from update import (
     start_update_task,
     orchestrator_update_step_one,
     close_temporary_container,
-    handle_container_id
 )
 
 logging.basicConfig(
@@ -25,8 +24,6 @@ logging.basicConfig(
 )
 
 app = web.Application()
-
-app.add_routes([web.post('/handle_container_id', handle_container_id)])
 
 # DYNAMIC PROMETHEUS TARGETS
 app.add_routes([web.get('/targets', handle_targets)])
@@ -39,7 +36,6 @@ def handle_signal(app, loop, signame):
     logging.info(f"Received signal {signame}, gracefully shutting down...")
     loop.create_task(app.shutdown())
 
-app['self_container_id'] = ''
 # AUTOMATIC UPDATE
 CLOSE_CONTAINER_ID = os.getenv("CLOSE_CONTAINER_ID", False)
 if CLOSE_CONTAINER_ID:

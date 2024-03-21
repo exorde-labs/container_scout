@@ -115,59 +115,6 @@ async def get_digests_for_imgs(imgs: list[str]):
     return {img: digest for img, digest in filtered_results}
 
 
-async def get_self_container_id(app):
-    """
-    Retrieves the container ID by reading the hostname, which Docker sets to the container's ID.
-    """
-    while app['self_container_id'] == '':
-        logging.info("waiting to receive container id")
-        await asyncio.sleep(1)
-    return app['self_container_id']
-
-async def handle_container_id(request):
-    """
-    (Used with `submit container_id`)
-    Dificult to retrieve the container_id from within a container.
-
-    - aiodocker.containers.get('self') -> 404
-    - hostname -> mismatch
-    - cat /proc/self/cgroup -> /**/ (something v2)
-
-    Anyway, a solution to this is to add some kind of socket communication
-    between the two containers ; allowing them to exchange information while
-    both are alive.
-
-    Hence, this endpoint serves as a input which allows containers to pass
-    the information they have about each other.
-    """
-    content = await request.json_response()
-    logging.info("Received self_container_id, I'm {content['container_id']}")
-    request.app["self_container_id"] = content["container_id"]
-    return web.Response(text="ok")
-
-async def submit_container_id(container):
-    """
-    (Used with `handle_container_id`)
-    Submits the container ID to an aiohttp endpoint '/handle_container_id'.
-
-    Parameters:
-        container: An instance of a Docker container obtained through aiodocker.
-
-    Returns:
-        True if the request was successful, False otherwise.
-    """
-    container_info = await container.show()
-    network_settings = container_info.get('NetworkSettings', {})
-    networks = network_settings.get('Networks', {})
-    exorde_network = networks.get('exorde-network', {})
-    host = exorde_network.get('IPAddress')
-    container_port = 8000
-    payload = {"container_id": container_info["Id"]}
-    async with ClientSession() as session:
-        url = f"http://{container_info['Name'][1:]}:{container_port}/handle_container_id"
-        async with session.post(url, json=payload) as response:
-            return response.status == 200
-
 async def close_temporary_container(app):
     """
     STEP 2 OF ORCHESTRATOR UPDATE
@@ -212,7 +159,28 @@ async def orchestrator_update_step_one(app):
     details = await existing_container.show()
     config = dict(details['Config'])
     config['HostConfig'] = new_container_host_config
-    self_id = await get_self_container_id(app)
+    
+    """
+     -> we cannot know `container_id` before the creation so we cannot get it 
+        trough `env`
+     -> can we get it by `calculation` ?
+        -> containers.list().filter(name='orchestrator-*-temp')[0].id
+    """
+    containers = await docker.containers.list(filters={
+        "label": ["network.exorde.monitor=true"],
+        "ancestor": "exordelabs/orchestrator"
+    })
+
+    self_id = ''
+    for container in containers:
+        container_info = await container.show()
+        config = container_info.get("Config", {})
+        name = config.get("Name", "")
+        if name.startswith("/orchestrator-temp-"):
+            self_id = container.id
+    assert self_id != ''
+    logging.info(f"Found self container id : I'm {self_id} !")
+    # this is identifying SELF (or the temp container)
     config['Env'].append(f"FINAL_CLOSE_CONTAINER_ID={self_id}")
     logging.info(f"I'm {self_id} - creating new container")
     new_container = await docker.containers.create_or_replace(
@@ -310,14 +278,7 @@ async def update_orchestrator(
     logging.info(
         f"New version at {new_container.id} started, it will take over, bye !"
     )
-    while True:
-        await asyncio.sleep(10)
-        try:
-            await submit_container_id(new_container)
-            break
-        except Exception:
-            logging.exception("An error occured while trying to submit container_id")
-        await asyncio.sleep(10)
+    
 
 async def recreate_container(
     docker, container, module_digest_map, last_pull_times
