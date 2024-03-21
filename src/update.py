@@ -166,6 +166,9 @@ async def update_orchestrator(
     new_configuration['Env'].append(
         f"MODULE_DIGEST_MAP={json.dumps(module_digest_map)}"
     )
+    new_configuration['HostConfig'] = details['HostConfig']
+    new_configuration['HostConfig']['PortBindings'] = {} # ports are unique resources
+
     logging.info(
         f"new orchestrator configuration is : \n{json.dumps(new_configuration)}"
     )
