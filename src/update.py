@@ -120,13 +120,17 @@ async def close_temporary_container(app):
     STEP 2 OF ORCHESTRATOR UPDATE
     (this runs inside the new orchestrator container)
     """
-    logging.info("Running `close_temporary_container` procedure")
     FINAL_CLOSE_CONTAINER_ID = os.getenv("FINAL_CLOSE_CONTAINER_ID")
+    logging.info(f"Running `close_temporary_container` procedure on {FINAL_CLOSE_CONTAINER_ID}")
     docker = Docker()
-    existing_container = await docker.containers.get(FINAL_CLOSE_CONTAINER_ID)
-    await existing_container.stop()
-    await existing_container.delete()
-    logging.info("Cleaned up temporary container")
+    try:
+        existing_container = await docker.containers.get(FINAL_CLOSE_CONTAINER_ID)
+        await existing_container.stop()
+        await existing_container.delete(force=True)
+        logging.info("Cleaned up temporary container")
+    except:
+        logging.info("Could not find the container")
+    await docker.close()
 
 async def orchestrator_update_step_one(app):
     """
