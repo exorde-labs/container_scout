@@ -96,23 +96,15 @@ async def get_digests_for_imgs(imgs: list[str]):
     
     return {img: digest for img, digest in filtered_results}
 
+
 def get_container_id():
     """
-    Attempts to retrieve the current container's ID by reading the /proc/self/cgroup file
-    and extracting the container ID from it. This is based on the assumption that the container
-    runtime uses cgroups and that the container ID is present in the cgroup path.
-
-    Returns:
-        str: The container ID if found, otherwise None.
+    Retrieves the container ID by reading the hostname, which Docker sets to the container's ID.
     """
-    try:
-        with open('/proc/self/cgroup', 'rt') as file:
-            for line in file:
-                if 'docker' in line:
-                    return line.split('/')[-1].strip()
-    except Exception as e:
-        logging.exception(f"Could not retrieve self container id")
-    return None
+    import socket
+    # Get the hostname, which should be the container's ID in a Docker environment
+    container_id = socket.gethostname()
+    return container_id
 
 async def close_temporary_container(app):
     FINAL_CLOSE_CONTAINER_ID = os.getenv('FINAL_CLOSE_CONTAINER_ID')
