@@ -175,7 +175,7 @@ async def orchestrator_update_step_one(app):
         container_info = await container.show()
         config = container_info.get("Config", {})
         name = config.get("Name", "")
-        if name.startswith("/orchestrator-temp-"):
+        if "orchestrator" in name and "temp" in name:
             self_id = container.id
     assert self_id != ''
     logging.info(f"Found self container id : I'm {self_id} !")
