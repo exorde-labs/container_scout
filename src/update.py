@@ -172,10 +172,13 @@ async def orchestrator_update_step_one(app):
 
     self_id = ''
     for container in containers:
+        logging.info(f"Looking at {container.id}")
         container_info = await container.show()
         config = container_info.get("Config", {})
         name = config.get("Name", "")
+        logging.info(f"\t...name is {name}")
         if "orchestrator" in name and "temp" in name:
+            logging.info(f"Found container id !")
             self_id = container.id
     assert self_id != ''
     logging.info(f"Found self container id : I'm {self_id} !")
