@@ -405,10 +405,10 @@ def build_updater():
             current_digest = module_digest_map.get(img, None)                   
 
             if current_digest is None or current_digest != latest_digest:       
-                logging.info(f"Scheduling an update for {img}")                 
-                await schedule_update(container, img, module_digest_map)
                 logging.info(f"Updating module_digest_map: {module_digest_map}") 
                 module_digest_map[img] = latest_digest
+                logging.info(f"Scheduling an update for {img}")                 
+                await schedule_update(container, img, module_digest_map)
 
         logging.info("Versioning loop complete")                                
     return enforce_versioning 
