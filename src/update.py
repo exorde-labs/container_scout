@@ -119,7 +119,7 @@ async def get_self_container_id(app):
     """
     Retrieves the container ID by reading the hostname, which Docker sets to the container's ID.
     """
-    while not app['self_container_id']:
+    while app['self_container_id'] == '':
         logging.info("waiting to receive container id")
         await asyncio.sleep(1)
     return app['self_container_id']
@@ -310,8 +310,14 @@ async def update_orchestrator(
     logging.info(
         f"New version at {new_container.id} started, it will take over, bye !"
     )
-
-    await submit_container_id(new_container)
+    while True:
+        await asyncio.sleep(10)
+        try:
+            await submit_container_id(new_container)
+            break
+        except Exception:
+            logging.exception("An error occured while trying to submit container_id")
+        await asyncio.sleep(10)
 
 async def recreate_container(
     docker, container, module_digest_map, last_pull_times

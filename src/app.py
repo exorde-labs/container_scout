@@ -39,6 +39,7 @@ def handle_signal(app, loop, signame):
     logging.info(f"Received signal {signame}, gracefully shutting down...")
     loop.create_task(app.shutdown())
 
+app['self_container_id'] = ''
 # AUTOMATIC UPDATE
 CLOSE_CONTAINER_ID = os.getenv("CLOSE_CONTAINER_ID", False)
 if CLOSE_CONTAINER_ID:
