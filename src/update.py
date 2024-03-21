@@ -107,6 +107,7 @@ def get_container_id():
     return container_id
 
 async def close_temporary_container(app):
+    logging.info("Running `close_temporary_container` procedure")
     FINAL_CLOSE_CONTAINER_ID = os.getenv('FINAL_CLOSE_CONTAINER_ID')
     docker = Docker()
     existing_container = await docker.containers.get(FINAL_CLOSE_CONTAINER_ID)
@@ -115,6 +116,7 @@ async def close_temporary_container(app):
     logging.info("Cleaned up temporary container")
 
 async def close_parent_container(app):
+    logging.info("I'm a temporary container ; Running `close_parent_container` procedure")
     CLOSE_CONTAINER_ID = os.getenv("CLOSE_CONTAINER_ID")
     docker = Docker()
     existing_container = await docker.containers.get(CLOSE_CONTAINER_ID)
@@ -123,7 +125,9 @@ async def close_parent_container(app):
     details = await existing_container.show()
     config = dict(details['Config'])
     config['HostConfig'] = new_container_host_config
-    config['Env'].append(f"FINAL_CLOSE_CONTAINER_ID={get_container_id()}")
+    self_id = get_container_id()
+    config['Env'].append(f"FINAL_CLOSE_CONTAINER_ID={self_id}")
+    logging.info(f"I'm {self_id} - creating new container")
     new_container = await docker.containers.create_or_replace(
         name=details['Name'][1:].replace("-temp", ""),
         config=config
@@ -134,9 +138,7 @@ async def close_parent_container(app):
     await existing_container.delete()
 
     await docker.close()
-    logging.info("I'm done here ! Bye Bye !")
-    os._exit(0)
-
+    logging.info(f"New version at {new_container.id} started, it will take over, bye !")
 
 async def update_orchestrator(
     existing_container, details, module_digest_map, last_pull_times

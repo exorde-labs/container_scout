@@ -50,6 +50,7 @@ if CLOSE_CONTAINER_ID:
 
 FINAL_CLOSE_CONTAINER_ID = os.getenv("FINAL_CLOSE_CONTAINER_ID", False)
 if FINAL_CLOSE_CONTAINER_ID:
+    logging.info(f"Will close {FINAL_CLOSE_CONTAINER_ID}")
     app.on_startup.append(close_temporary_container)
 
 if __name__ == '__main__':
