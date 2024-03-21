@@ -122,6 +122,7 @@ async def close_parent_container(app):
     await existing_container.stop()
     await existing_container.delete()
     await docker.close()
+    logging.info("I'm done here ! Bye Bye !")
     os._exit(0)
 
 
@@ -165,7 +166,6 @@ async def update_orchestrator(
     new_configuration['Env'].append(
         f"MODULE_DIGEST_MAP={json.dumps(module_digest_map)}"
     )
-    new_configuration['HostConfig'] = details['HostConfig']
     logging.info(
         f"new orchestrator configuration is : \n{json.dumps(new_configuration)}"
     )
