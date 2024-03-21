@@ -7,6 +7,12 @@ import os
 import json
 from datetime import datetime
 
+# Custom serializer for datetime objects
+def datetime_serializer(obj):
+    if isinstance(obj, datetime):
+        return obj.isoformat()
+    raise TypeError("Type not serializable")
+
 async def get_docker_hub_token(
     image_name: str
 ) -> str:
@@ -163,6 +169,8 @@ async def orchestrator_update_step_one(app):
     details = await existing_container.show()
     config = dict(details['Config'])
     config['HostConfig'] = new_container_host_config
+    config['Env'].append(f"LAST_PULL_TIMES={os.getenv('LAST_PULL_TIMES')}")
+    config['Env'].append(f"MODULE_DIGEST_MAP={os.getenv('MODULE_DIGEST_MAP')}")
     
     """
      -> we cannot know `container_id` before the creation so we cannot get it 
@@ -251,21 +259,13 @@ async def update_orchestrator(
     existing_configuration = details["Config"]
     logging.info("Updating the orchestrator")
     new_configuration = dict(existing_configuration)
-    new_configuration['Env'].append(
-        f"MODULE_DIGEST_MAP={json.dumps(module_digest_map)}"
-    )
+
     new_configuration['HostConfig'] = details['HostConfig']
     new_configuration['HostConfig']['PortBindings'] = {} # ports are unique resources
 
-    logging.info(
-        f"new orchestrator configuration is : \n{json.dumps(new_configuration)}"
+    new_configuration['Env'].append(
+        f"MODULE_DIGEST_MAP={json.dumps(module_digest_map)}"
     )
-    # Custom serializer for datetime objects
-    def datetime_serializer(obj):
-        if isinstance(obj, datetime):
-            return obj.isoformat()
-        raise TypeError("Type not serializable")
-
     new_configuration['Env'].append(
         f"LAST_PULL_TIMES={json.dumps(last_pull_times, default=datetime_serializer)}"
     )
@@ -274,6 +274,10 @@ async def update_orchestrator(
     )
     new_configuration['Env'].append(
         f"NEW_CONTAINER_HOST_CONFIG={json.dumps(details['HostConfig'])}"
+    )
+
+    logging.info(
+        f"new orchestrator configuration is : \n{json.dumps(new_configuration)}"
     )
     new_container = await docker.containers.create_or_replace(
         name=f"{details['Name'][1:]}-temp",
