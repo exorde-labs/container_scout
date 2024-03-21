@@ -334,6 +334,7 @@ def build_update_function(delay: int, validity_threshold_seconds: int):
         os.getenv('LAST_PULL_TIMES', '{}'),
         object_hook=datetime_deserializer
     )
+    logging.info(f"LAST_PULL_TIMES IS  {json.dumps(last_pull_times, indent=4)}")
 
     async def pull_image_if_needed(docker, image):
         """Pulls a Docker image if it hasn't been pulled recently."""
@@ -389,6 +390,7 @@ def build_updater():
         module_digest_map = json.loads(preloaded_module_digest_map)             
     else:                                                                       
         module_digest_map = {}                                                  
+    logging.info(f"MODULE_DIGEST_MAP IS  {json.dumps(module_digest_map, indent=4)}")
     async def enforce_versioning(client):                                        
         logging.info("Enforcing versioning")                                    
         nonlocal module_digest_map                                               
