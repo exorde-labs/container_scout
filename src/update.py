@@ -167,8 +167,7 @@ async def orchestrator_update_step_one(app):
         -> containers.list().filter(name='orchestrator-*-temp')[0].id
     """
     containers = await docker.containers.list(filters={
-        "label": ["network.exorde.monitor=true"],
-        "ancestor": "exordelabs/orchestrator"
+        "label": ["network.exorde.monitor=true"]
     })
 
     self_id = ''
