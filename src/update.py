@@ -201,9 +201,12 @@ async def orchestrator_update_step_one(app):
         config=config
     )
     await new_container.start()
-
-    await existing_container.stop()
-    await existing_container.delete()
+    
+    try:
+        await existing_container.stop()
+        await existing_container.delete(force=True)
+    except:
+        logging.exception("Could not stop and delete the container")
 
     await docker.close()
     logging.info(
