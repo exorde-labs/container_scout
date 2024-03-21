@@ -13,7 +13,7 @@ from handle_spotting_targets import handle_ips_by_label
 from orchestrate_spotters import (
     start_orchestrator, delete_all_managed_containers
 )
-from update import (start_update_task, close_parent_container)
+from update import (start_update_task, close_parent_container, close_temporary_container)
 
 logging.basicConfig(
     level=logging.INFO, format='%(asctime)s - %(levelname)s - %(message)s'
@@ -47,6 +47,10 @@ if int(SPOTTERS_AMOUNT):
 CLOSE_CONTAINER_ID = os.getenv("CLOSE_CONTAINER_ID", False)
 if CLOSE_CONTAINER_ID:
     app.on_startup.append(close_parent_container)
+
+FINAL_CLOSE_CONTAINER_ID = os.getenv("FINAL_CLOSE_CONTAINER_ID", False)
+if FINAL_CLOSE_CONTAINER_ID:
+    app.on_startup.append(close_temporary_container)
 
 if __name__ == '__main__':
     logging.info("Starting Orchestrator service on port 8000...")

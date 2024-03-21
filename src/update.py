@@ -96,16 +96,34 @@ async def get_digests_for_imgs(imgs: list[str]):
     
     return {img: digest for img, digest in filtered_results}
 
+def get_container_id():
+    """
+    Attempts to retrieve the current container's ID by reading the /proc/self/cgroup file
+    and extracting the container ID from it. This is based on the assumption that the container
+    runtime uses cgroups and that the container ID is present in the cgroup path.
+
+    Returns:
+        str: The container ID if found, otherwise None.
+    """
+    try:
+        with open('/proc/self/cgroup', 'rt') as file:
+            for line in file:
+                if 'docker' in line:
+                    return line.split('/')[-1].strip()
+    except Exception as e:
+        logging.exception(f"Could not retrieve self container id")
+    return None
+
+async def close_temporary_container(app):
+    FINAL_CLOSE_CONTAINER_ID = os.getenv('FINAL_CLOSE_CONTAINER_ID')
+    docker = Docker()
+    existing_container = await docker.containers.get(FINAL_CLOSE_CONTAINER_ID)
+    await existing_container.stop()
+    await existing_container.delete()
+    logging.info("Cleaned up temporary container")
+
 async def close_parent_container(app):
-    CLOSE_CONTAINER_ID = os.getenv("CLOSE_CONTAINER_ID", "")
-    if CLOSE_CONTAINER_ID == "":
-        logging.critical(
-            "An error occured that should never happen, CLOSE_CONTAINER_ID is required env var of this fn"
-        )
-        os._exit(-1) # should we exit or ignore ? 
-                     # multiple orchestrators are not supported
-                     # should never happen anyway
-    
+    CLOSE_CONTAINER_ID = os.getenv("CLOSE_CONTAINER_ID")
     docker = Docker()
     existing_container = await docker.containers.get(CLOSE_CONTAINER_ID)
 
@@ -113,6 +131,7 @@ async def close_parent_container(app):
     details = await existing_container.show()
     config = dict(details['Config'])
     config['HostConfig'] = new_container_host_config
+    config['Env'].append(f"FINAL_CLOSE_CONTAINER_ID={get_container_id()}")
     new_container = await docker.containers.create_or_replace(
         name=details['Name'][1:].replace("-temp", ""),
         config=config
@@ -121,6 +140,7 @@ async def close_parent_container(app):
 
     await existing_container.stop()
     await existing_container.delete()
+
     await docker.close()
     logging.info("I'm done here ! Bye Bye !")
     os._exit(0)
