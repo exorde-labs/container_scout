@@ -8,6 +8,10 @@ the volume access for docker api to containers that are horizontaly scaled.
 import logging, os
 from aiohttp import web
 
+logging.basicConfig(
+    level=logging.INFO, format='%(asctime)s - %(levelname)s - %(message)s'
+)
+
 from handle_prometheus_targets import handle_targets
 from handle_spotting_targets import handle_ips_by_label
 from orchestrate_spotters import (
@@ -18,11 +22,6 @@ from update import (
     orchestrator_update_step_one,
     close_temporary_container,
 )
-
-logging.basicConfig(
-    level=logging.INFO, format='%(asctime)s - %(levelname)s - %(message)s'
-)
-
 app = web.Application()
 
 # DYNAMIC PROMETHEUS TARGETS
