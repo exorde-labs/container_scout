@@ -97,14 +97,14 @@ async def get_digests_for_imgs(imgs: list[str]):
     return {img: digest for img, digest in filtered_results}
 
 
-def get_container_id():
+async def get_self_container_id():
     """
     Retrieves the container ID by reading the hostname, which Docker sets to the container's ID.
     """
-    import socket
-    # Get the hostname, which should be the container's ID in a Docker environment
-    container_id = socket.gethostname()
-    return container_id
+    docker = Docker()
+    container = await docker.containers.get("self")
+    await docker.close()
+    return container.id
 
 async def close_temporary_container(app):
     logging.info("Running `close_temporary_container` procedure")
@@ -125,7 +125,7 @@ async def close_parent_container(app):
     details = await existing_container.show()
     config = dict(details['Config'])
     config['HostConfig'] = new_container_host_config
-    self_id = get_container_id()
+    self_id = await get_self_container_id()
     config['Env'].append(f"FINAL_CLOSE_CONTAINER_ID={self_id}")
     logging.info(f"I'm {self_id} - creating new container")
     new_container = await docker.containers.create_or_replace(
@@ -220,6 +220,7 @@ async def recreate_container(
     config = details["Config"]
     if "exordelabs/orchestrator" in config['Image']:
         logging.info("going to update the orchestrator instance")
+        # TODO *IMPORTANT* -> ORCHESTRATOR SHOULD BE UPDATED LAST
         await update_orchestrator(
             container, details, module_digest_map, last_pull_times 
         )
