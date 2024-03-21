@@ -72,10 +72,28 @@ async def get_image_from_container(container):
     return container, details['Config']['Image']
 
 async def images_of_containers(containers):
+    """
+    This also sets the /orchestrator image last to allow the full update of every
+    container BEFORE triggering self update
+    """
+    # Retrieve container/image pairs asynchronously
     r = await asyncio.gather(
         *[get_image_from_container(container) for container in containers]
     )
-    return list(set(r))
+    
+    # Separate pairs with "exordelabs/orchestrator" image from others
+    orchestrator_pairs = []
+    other_pairs = []
+    for pair in r:
+        if pair[1] == "exordelabs/orchestrator":
+            orchestrator_pairs.append(pair)
+        else:
+            other_pairs.append(pair)
+    
+    # Reorder the list to place "exordelabs/orchestrator" pairs last
+    reordered_pairs = other_pairs + orchestrator_pairs
+    
+    return reordered_pairs
 
 async def get_digests_for_imgs(imgs: list[str]):
     async def safe_get_image_manifest(image):
@@ -97,39 +115,107 @@ async def get_digests_for_imgs(imgs: list[str]):
     return {img: digest for img, digest in filtered_results}
 
 
-async def get_self_container_id():
+async def get_self_container_id(app):
     """
     Retrieves the container ID by reading the hostname, which Docker sets to the container's ID.
     """
-    docker = Docker()
-    container = await docker.containers.get("self")
-    await docker.close()
-    return container.id
+    while not app['self_container_id']:
+        logging.info("waiting to receive container id")
+        await asyncio.sleep(1)
+    return app['self_container_id']
+
+async def handle_container_id(request):
+    """
+    (Used with `submit container_id`)
+    Dificult to retrieve the container_id from within a container.
+
+    - aiodocker.containers.get('self') -> 404
+    - hostname -> mismatch
+    - cat /proc/self/cgroup -> /**/ (something v2)
+
+    Anyway, a solution to this is to add some kind of socket communication
+    between the two containers ; allowing them to exchange information while
+    both are alive.
+
+    Hence, this endpoint serves as a input which allows containers to pass
+    the information they have about each other.
+    """
+    content = await request.json_response()
+    logging.info("Received self_container_id, I'm {content['container_id']}")
+    request.app["self_container_id"] = content["container_id"]
+    return web.Response(text="ok")
+
+async def submit_container_id(container):
+    """
+    (Used with `handle_container_id`)
+    Submits the container ID to an aiohttp endpoint '/handle_container_id'.
+
+    Parameters:
+        container: An instance of a Docker container obtained through aiodocker.
+
+    Returns:
+        True if the request was successful, False otherwise.
+    """
+    container_info = await container.show()
+    network_settings = container_info["NetworkSettings"]
+    container_ip = network_settings["IPAddress"]
+    container_port = network_settings["Ports"]["<container_port>/tcp"][0]["HostPort"]
+
+    payload = {"container_id": container_info["Id"]}
+    async with ClientSession() as session:
+        url = f"http://{container_ip}:{container_port}/handle_container_id"
+        async with session.post(url, json=payload) as response:
+            return response.status == 200
 
 async def close_temporary_container(app):
+    """
+    STEP 2 OF ORCHESTRATOR UPDATE
+    (this runs inside the new orchestrator container)
+    """
     logging.info("Running `close_temporary_container` procedure")
-    FINAL_CLOSE_CONTAINER_ID = os.getenv('FINAL_CLOSE_CONTAINER_ID')
+    FINAL_CLOSE_CONTAINER_ID = os.getenv("FINAL_CLOSE_CONTAINER_ID")
     docker = Docker()
     existing_container = await docker.containers.get(FINAL_CLOSE_CONTAINER_ID)
     await existing_container.stop()
     await existing_container.delete()
     logging.info("Cleaned up temporary container")
 
-async def close_parent_container(app):
-    logging.info("I'm a temporary container ; Running `close_parent_container` procedure")
+async def orchestrator_update_step_one(app):
+    """
+    STEP 1 OF ORCHESTRATOR UPDATE
+    (this runs inside a container called orchestrator-*-temp)
+
+        a) retrieve self container_id
+            this is done using an additional http endpoint (see handle_container_id)
+
+        b) retrieve the old container
+
+        c) get details from old_container
+
+        d) create new container with same details
+            + FINAL_CLOSE_CONTAINER_ID
+            which is the the container_id of the `self`
+
+        e) stop and delete old container
+    """
+    logging.info(
+        "I'm a temporary container ; Running `orchestrator_update_step_one` procedure"
+    )
     CLOSE_CONTAINER_ID = os.getenv("CLOSE_CONTAINER_ID")
     docker = Docker()
     existing_container = await docker.containers.get(CLOSE_CONTAINER_ID)
 
-    new_container_host_config = json.loads(os.getenv("NEW_CONTAINER_HOST_CONFIG", "{}"))
+    new_container_host_config = json.loads(
+        os.getenv("NEW_CONTAINER_HOST_CONFIG", "{}")
+    )
     details = await existing_container.show()
     config = dict(details['Config'])
     config['HostConfig'] = new_container_host_config
-    self_id = await get_self_container_id()
+    self_id = await get_self_container_id(app)
     config['Env'].append(f"FINAL_CLOSE_CONTAINER_ID={self_id}")
     logging.info(f"I'm {self_id} - creating new container")
     new_container = await docker.containers.create_or_replace(
-        name=details['Name'][1:].replace("-temp", ""),
+        name=details["Name"][1:].replace("-temp", ""),
         config=config
     )
     await new_container.start()
@@ -138,7 +224,9 @@ async def close_parent_container(app):
     await existing_container.delete()
 
     await docker.close()
-    logging.info(f"New version at {new_container.id} started, it will take over, bye !")
+    logging.info(
+        f"New version at {new_container.id} started, it will take over, bye !"
+    )
 
 async def update_orchestrator(
     existing_container, details, module_digest_map, last_pull_times
@@ -152,27 +240,39 @@ async def update_orchestrator(
     We can pass,
 
         - `module_digest_map` (MODULE_DIGEST_MAP), 
-      
+
         - `last_pull_times` (LAST_PULL_TIMES) 
-      
+
         - the `container_id` (CLOSE_CONTAINER_ID)
-    
-    to the newly created container. 
+
+    to the newly created container.
 
     Which allows the new orchestrator to sync on the job,
 
         - delete the parent properly 
         (in-proc closing prevents delete, and delete requires closes).
-       
+
        - continue on the same "phase"
 
     It's a hassle to use the container_id in order to broadcast a selfupdate
     procedure to N orchestrators. Running multiple orchestrator has no benefit
     and this is therfor not supported. Doing this would result in clones and
     conflicting orch.
+   
+
+    We CANNOT pass
+        - docker meta-data at creation time
+            (eg newly created container_id, since it's known after creation)
+
+    Which forces us to include a network exchange between the two containers,
+    this is not a thing on the first container because we already have an
+    instance of the container and we have the limitation of only one 
+    "orchestrator" instance.
+
+    However, as soon as we have spawned the temporary orchestrator, we cannot
+    determin the container_id with exactitude, hence this problem.
+
     """
-
-
     docker = Docker()
     existing_configuration = details["Config"]
     logging.info("Updating the orchestrator")
@@ -210,6 +310,7 @@ async def update_orchestrator(
         f"New version at {new_container.id} started, it will take over, bye !"
     )
 
+    await submit_container_id(new_container)
 
 async def recreate_container(
     docker, container, module_digest_map, last_pull_times

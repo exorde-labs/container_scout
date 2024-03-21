@@ -13,13 +13,20 @@ from handle_spotting_targets import handle_ips_by_label
 from orchestrate_spotters import (
     start_orchestrator, delete_all_managed_containers
 )
-from update import (start_update_task, close_parent_container, close_temporary_container)
+from update import (
+    start_update_task,
+    orchestrator_update_step_one,
+    close_temporary_container,
+    handle_container_id
+)
 
 logging.basicConfig(
     level=logging.INFO, format='%(asctime)s - %(levelname)s - %(message)s'
 )
 
 app = web.Application()
+
+app.add_routes([web.post('/handle_container_id', handle_container_id)])
 
 # DYNAMIC PROMETHEUS TARGETS
 app.add_routes([web.get('/targets', handle_targets)])
@@ -33,9 +40,22 @@ def handle_signal(app, loop, signame):
     loop.create_task(app.shutdown())
 
 # AUTOMATIC UPDATE
-if os.getenv("AUTOMATIC_UPDATE", True):
-    logging.info("Will pull images and update out-of-date containers")
+CLOSE_CONTAINER_ID = os.getenv("CLOSE_CONTAINER_ID", False)
+if CLOSE_CONTAINER_ID:
+    app.on_startup.append(orchestrator_update_step_one)
+
+if os.getenv("AUTOMATIC_UPDATE", True) and not CLOSE_CONTAINER_ID:
     app.on_startup.append(start_update_task)
+    logging.info("Will pull images and update out-of-date containers")
+else:
+    logging.info("Will NOT pull images and update out-of-date containers")
+
+FINAL_CLOSE_CONTAINER_ID = os.getenv("FINAL_CLOSE_CONTAINER_ID", False)
+if FINAL_CLOSE_CONTAINER_ID:
+    logging.info(f"Will close {FINAL_CLOSE_CONTAINER_ID}")
+    app.on_startup.append(close_temporary_container)
+
+# AUTOMATIC UPDATE END 
 
 # SPOTTERS ORCHESTRATION
 SPOTTERS_AMOUNT = os.getenv("SPOTTERS_AMOUNT", 0)
@@ -43,15 +63,6 @@ logging.info(f"running {SPOTTERS_AMOUNT} spotters")
 if int(SPOTTERS_AMOUNT):
     app.on_startup.append(start_orchestrator)
     app.on_shutdown.append(delete_all_managed_containers)
-
-CLOSE_CONTAINER_ID = os.getenv("CLOSE_CONTAINER_ID", False)
-if CLOSE_CONTAINER_ID:
-    app.on_startup.append(close_parent_container)
-
-FINAL_CLOSE_CONTAINER_ID = os.getenv("FINAL_CLOSE_CONTAINER_ID", False)
-if FINAL_CLOSE_CONTAINER_ID:
-    logging.info(f"Will close {FINAL_CLOSE_CONTAINER_ID}")
-    app.on_startup.append(close_temporary_container)
 
 if __name__ == '__main__':
     logging.info("Starting Orchestrator service on port 8000...")
