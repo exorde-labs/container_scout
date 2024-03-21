@@ -334,7 +334,7 @@ def build_update_function(delay: int, validity_threshold_seconds: int):
         os.getenv('LAST_PULL_TIMES', '{}'),
         object_hook=datetime_deserializer
     )
-    logging.info(f"LAST_PULL_TIMES IS  {json.dumps(last_pull_times, indent=4)}")
+    logging.info(f"LAST_PULL_TIMES IS  {json.dumps(last_pull_times, indent=4, default=datetime_serializer)}")
 
     async def pull_image_if_needed(docker, image):
         """Pulls a Docker image if it hasn't been pulled recently."""
