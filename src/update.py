@@ -301,7 +301,7 @@ async def recreate_container(
     config = details["Config"]
     if "exordelabs/orchestrator" in config['Image']:
         logging.info("going to update the orchestrator instance")
-        # TODO *IMPORTANT* -> ORCHESTRATOR SHOULD BE UPDATED LAST
+        # *IMPORTANT* -> ORCHESTRATOR HAS TO BE UPDATED LAST
         await update_orchestrator(
             container, details, module_digest_map, last_pull_times 
         )
@@ -406,8 +406,9 @@ def build_updater():
 
             if current_digest is None or current_digest != latest_digest:       
                 logging.info(f"Scheduling an update for {img}")                 
-                await schedule_update(container, img, latest_digest)            
-                module_digest_map[img] = latest_digest                    
+                await schedule_update(container, img, module_digest_map)
+                logging.info(f"Updating module_digest_map: {module_digest_map}") 
+                module_digest_map[img] = latest_digest
 
         logging.info("Versioning loop complete")                                
     return enforce_versioning 
