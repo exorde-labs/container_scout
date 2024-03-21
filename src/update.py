@@ -164,7 +164,7 @@ async def submit_container_id(container):
     container_port = 8000
     payload = {"container_id": container_info["Id"]}
     async with ClientSession() as session:
-        url = f"http://{host}:{container_port}/handle_container_id"
+        url = f"http://{container_info['Name'][1:]}:{container_port}/handle_container_id"
         async with session.post(url, json=payload) as response:
             return response.status == 200
 
