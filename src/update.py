@@ -159,8 +159,7 @@ async def submit_container_id(container):
     container_info = await container.show()
     network_settings = container_info["NetworkSettings"]
     container_ip = network_settings["IPAddress"]
-    container_port = network_settings["Ports"]["<container_port>/tcp"][0]["HostPort"]
-
+    container_port = 8000
     payload = {"container_id": container_info["Id"]}
     async with ClientSession() as session:
         url = f"http://{container_ip}:{container_port}/handle_container_id"
