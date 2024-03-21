@@ -157,12 +157,14 @@ async def submit_container_id(container):
         True if the request was successful, False otherwise.
     """
     container_info = await container.show()
-    network_settings = container_info["NetworkSettings"]
-    container_ip = network_settings["IPAddress"]
+    network_settings = container_info.get('NetworkSettings', {})
+    networks = network_settings.get('Networks', {})
+    exorde_network = networks.get('exorde-network', {})
+    host = exorde_network.get('IPAddress')
     container_port = 8000
     payload = {"container_id": container_info["Id"]}
     async with ClientSession() as session:
-        url = f"http://{container_ip}:{container_port}/handle_container_id"
+        url = f"http://{host}:{container_port}/handle_container_id"
         async with session.post(url, json=payload) as response:
             return response.status == 200
 

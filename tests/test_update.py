@@ -50,26 +50,6 @@ async def test_get_container_details():
 
     logging.info(json.dumps(details, indent=4))
 
-@pytest.mark.asyncio
-async def test_get_container_ip():
-    docker = Docker()
-    await docker.version()
-
-    await docker.images.pull('alpine:latest')
-    container = await docker.containers.create_or_replace(
-        config={'Image': 'alpine:latest', 'Cmd': ['sleep', '30']},
-        name="test-container"
-    )
-
-    try:
-        container_info = await container.show()
-        container_ip = container_info['NetworkSettings']['IPAddress']
-        print(f"Container IP: {container_ip}")
-    except Exception as e:
-        pytest.fail(f"Integration test failed with exception: {e}")
-
-    await container.delete(force=True)
-
 
 @pytest.mark.asyncio
 async def test_update():
