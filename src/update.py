@@ -396,6 +396,14 @@ schedule_update = build_update_function(
     delay=5, validity_threshold_seconds=30
 )
 
+def digests_are_equal(current_digest, latest_digest):
+    if len(current_digest) != len(latest_digest):
+        return False
+    for digest_current, digest_latest in zip(current_digest, latest_digest):
+        if digest_current != digest_latest:
+            return False
+    return True
+
 def build_updater():                                                            
     preloaded_module_digest_map = os.getenv('MODULE_DIGEST_MAP', '')            
     if preloaded_module_digest_map != '':                                       
@@ -421,7 +429,7 @@ def build_updater():
             logging.info(
                 f"\t\t - Previous digest for {img}: `{json.dumps(current_digest, indent=4)}`"
             )
-            if current_digest is None or current_digest != latest_digest:
+            if current_digest is None or not digests_are_equal(current_digest, latest_digest):
                 logging.info(f"\t - DETECTED DIGEST CHANGE FOR {img}")
                 module_digest_map[img] = latest_digest
                 logging.info(f"\t\t - Scheduling an update for {img}")
