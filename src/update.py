@@ -307,12 +307,20 @@ async def recreate_container(
             container, details, module_digest_map, last_pull_times 
         )
         return
+    logging.info(f"Existing container image is {details['Image']}")
+    logging.info("Stopping & Deleting it")
+    await container.stop()
+    await container.delete()
+
     # logging.info(f"{json.dumps(details, indent=4)}")
     config['HostConfig'] = details['HostConfig']
     new_container = await docker.containers.create_or_replace(
         name=details['Name'][1:], config=config
     )
+    new_details = await new_container.show()
+    logging.info(f"New container image is {new_details['Image']}")
     await new_container.start()
+    logging.info("New container started")
 
 # Custom deserializer for datetime objects
 def datetime_deserializer(dict_):
