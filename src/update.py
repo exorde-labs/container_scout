@@ -216,7 +216,7 @@ async def orchestrator_update_step_one(app):
     )
 
 async def update_orchestrator(
-    existing_container, details, module_digest_map, last_pull_times
+    original_container, details, module_digest_map, last_pull_times
 ):
     """
     The dificulty is that closing the orchestrator process would close this 
@@ -262,12 +262,11 @@ async def update_orchestrator(
     """
     logging.info("Updating the Orchestrator")
     docker = Docker()
-    existing_configuration = details["Config"]
-    new_configuration = dict(existing_configuration)
-
+    original_configuration = details["Config"]
+    
+    new_configuration = dict(original_configuration)
     new_configuration['HostConfig'] = details['HostConfig']
     new_configuration['HostConfig']['PortBindings'] = {} # ports are unique resources
-
     new_configuration['Env'].append(
         f"MODULE_DIGEST_MAP={json.dumps(module_digest_map)}"
     )
@@ -275,7 +274,7 @@ async def update_orchestrator(
         f"LAST_PULL_TIMES={json.dumps(last_pull_times, default=datetime_serializer)}"
     )
     new_configuration['Env'].append(
-        f"CLOSE_CONTAINER_ID={existing_container.id}"
+        f"CLOSE_CONTAINER_ID={original_container.id}"
     )
     new_configuration['Env'].append(
         f"NEW_CONTAINER_HOST_CONFIG={json.dumps(details['HostConfig'])}"
@@ -300,7 +299,7 @@ async def recreate_container(
     """Recreates a container asynchronously."""
     details = await container.show()
     config = details["Config"]
-    logging.info(f"Recreating container {container.id} ({config['Image']})")
+    logging.info(f"Recreating container `{container.id}` ({config['Image']})")
     if "exordelabs/orchestrator" in config['Image']:
         # *IMPORTANT* -> ORCHESTRATOR HAS TO BE UPDATED LAST
         await update_orchestrator(
@@ -361,8 +360,13 @@ def build_update_function(delay: int, validity_threshold_seconds: int):
         async with Docker() as docker:
             await asyncio.sleep(5)
             containers = images_to_update[image]
+            logging.info(f"Running handle_image_update for {image}")
+            logging.info(f"\t - containers are: {[container.id for container in containers]}")
             pulled = await pull_image_if_needed(docker, image)
             if pulled:
+                logging.info(
+                    f"\t - Image have been pulled, triggering update for {[container.id for container in containers]}"
+                )
                 await update_containers(
                     docker, image, containers, module_digest_map
                 )
@@ -406,20 +410,20 @@ def build_updater():
         images = [img for img in containers_and_images] 
         logging.info(f"Looking at {len(images)} images") 
         latest_digests = await get_digests_for_imgs(images) 
-
-        for container, img in containers_and_images: 
+        for container, img in containers_and_images:
+            logging.info(f"\t- checking {container.id}")
             latest_digest = latest_digests[img] 
             current_digest = module_digest_map.get(img, None)
             logging.info(
-                f"Latest digest for {img}: `{latest_digest}`"
+                f"\t\t - Latest digest for {img}: `{json.dumps(latest_digest, indent=4)}`"
             )
             logging.info(
-                f"Previous digest for {img}: `{current_digest}`"
+                f"\t\t - Previous digest for {img}: `{json.dumps(current_digest, indent=4)}`"
             )
             if current_digest is None or current_digest != latest_digest:
-                logging.info(f"DETECTED DIGEST CHANGE FOR {img}")
+                logging.info(f"\t - DETECTED DIGEST CHANGE FOR {img}")
                 module_digest_map[img] = latest_digest
-                logging.info(f"Scheduling an update for {img}")
+                logging.info(f"\t\t - Scheduling an update for {img}")
                 await schedule_update(container, img, module_digest_map)
 
         logging.info("Versioning loop complete") 
