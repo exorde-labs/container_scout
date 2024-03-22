@@ -408,15 +408,15 @@ def build_updater():
 
         for container, img in containers_and_images:                            
             latest_digest = latest_digests[img]                                 
-            current_digest = module_digest_map.get(img, None)                   
-
-            if current_digest is None or current_digest != latest_digest:       
-                logging.info(
-                    f"Updating module_digest_map for {img}: {latest_digest}"
-                )
-                logging.info(
-                    f"Previous digest for {img}: {module_digest_map[img]}"
-                )
+            current_digest = module_digest_map.get(img, None)
+            logging.info(
+                f"Latest digest for {img}: `{latest_digest}`"
+            )
+            logging.info(
+                f"Previous digest for {img}: `{current_digest}`"
+            )
+            if current_digest is None or current_digest != latest_digest:
+                logging.info(f"Updating {img}")
                 module_digest_map[img] = latest_digest
                 logging.info(f"Scheduling an update for {img}")                 
                 await schedule_update(container, img, module_digest_map)
