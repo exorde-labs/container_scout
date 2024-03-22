@@ -355,12 +355,17 @@ def build_update_function(delay: int, validity_threshold_seconds: int):
             await asyncio.sleep(delay)
             await recreate_container(docker, container, module_digest_map, last_pull_times)
 
-    async def handle_image_update(image, containers, module_digest_map):
+    async def handle_image_update(image, module_digest_map):
         """Handles updating of containers for a specific image."""
+        nonlocal images_to_update
         async with Docker() as docker:
+            await asyncio.sleep(5)
+            containers = images_to_update[image]
             pulled = await pull_image_if_needed(docker, image)
             if pulled:
-                await update_containers(docker, image, containers, module_digest_map)
+                await update_containers(
+                    docker, image, containers, module_digest_map
+                )
 
     async def schedule_update(container, image: str, module_digest_map):
         """
@@ -375,11 +380,13 @@ def build_update_function(delay: int, validity_threshold_seconds: int):
 
         # Check if this is the first container for the image to schedule the task
         if len(images_to_update[image]) == 1:
-            asyncio.create_task(handle_image_update(image, images_to_update[image], module_digest_map))
+            asyncio.create_task(
+                handle_image_update(
+                    image, module_digest_map
+                )
+            )
 
     return schedule_update
-
-# Example usage:
 schedule_update = build_update_function(
     delay=5, validity_threshold_seconds=30
 )
@@ -390,7 +397,6 @@ def build_updater():
         module_digest_map = json.loads(preloaded_module_digest_map)             
     else:                                                                       
         module_digest_map = {}                                                  
-    logging.info(f"MODULE_DIGEST_MAP IS  {json.dumps(module_digest_map, indent=4)}")
     async def enforce_versioning(client):                                        
         logging.info("Enforcing versioning")                                    
         nonlocal module_digest_map                                               
@@ -407,6 +413,7 @@ def build_updater():
             if current_digest is None or current_digest != latest_digest:       
                 logging.info(f"Updating module_digest_map: {module_digest_map}") 
                 module_digest_map[img] = latest_digest
+
                 logging.info(f"Scheduling an update for {img}")                 
                 await schedule_update(container, img, module_digest_map)
 
