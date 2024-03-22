@@ -280,7 +280,7 @@ async def update_orchestrator(
     )
 
     logging.info(
-        f"new orchestrator configuration is : \n{json.dumps(new_configuration)}"
+        f"Temporary orchestrator configuration is : \n{json.dumps(new_configuration)}"
     )
     new_container = await docker.containers.create_or_replace(
         name=f"{details['Name'][1:]}-temp",
@@ -288,7 +288,7 @@ async def update_orchestrator(
     )
     await new_container.start()
     logging.info(
-        f"New version at {new_container.id} started, it will take over, bye !"
+        f"Temporary Container {new_container.id} started, it will take over, bye !"
     )
     
 
@@ -411,9 +411,13 @@ def build_updater():
             current_digest = module_digest_map.get(img, None)                   
 
             if current_digest is None or current_digest != latest_digest:       
-                logging.info(f"Updating module_digest_map: {module_digest_map}") 
+                logging.info(
+                    f"Updating module_digest_map for {img}: {latest_digest}"
+                )
+                logging.info(
+                    f"Previous digest for {img}: {module_digest_map[img]}"
+                )
                 module_digest_map[img] = latest_digest
-
                 logging.info(f"Scheduling an update for {img}")                 
                 await schedule_update(container, img, module_digest_map)
 
