@@ -195,7 +195,9 @@ async def orchestrator_update_step_one(app):
     logging.info(f"Found self container id : I'm {self_id} !")
     # this is identifying SELF (or the temp container)
     config['Env'].append(f"FINAL_CLOSE_CONTAINER_ID={self_id}")
-    logging.info(f"I'm {self_id} - creating new container")
+    logging.info(f"Creating new container")
+    logging.info("Here's it's env")
+    logging.info(json.dumps(config['Env'], indent=4))
     new_container = await docker.containers.create_or_replace(
         name=details["Name"][1:].replace("-temp", ""),
         config=config
@@ -258,9 +260,9 @@ async def update_orchestrator(
     determin the container_id with exactitude, hence this problem.
 
     """
+    logging.info("Updating the Orchestrator")
     docker = Docker()
     existing_configuration = details["Config"]
-    logging.info("Updating the orchestrator")
     new_configuration = dict(existing_configuration)
 
     new_configuration['HostConfig'] = details['HostConfig']
@@ -296,17 +298,15 @@ async def recreate_container(
     docker, container, module_digest_map, last_pull_times
 ):
     """Recreates a container asynchronously."""
-    logging.info(f"Recreating container {container.id}")
     details = await container.show()
     config = details["Config"]
+    logging.info(f"Recreating container {container.id} ({config['Image']})")
     if "exordelabs/orchestrator" in config['Image']:
-        logging.info("going to update the orchestrator instance")
         # *IMPORTANT* -> ORCHESTRATOR HAS TO BE UPDATED LAST
         await update_orchestrator(
             container, details, module_digest_map, last_pull_times 
         )
         return
-    logging.info(f"Recreating container {container.id} ({config['Image']})")
     # logging.info(f"{json.dumps(details, indent=4)}")
     config['HostConfig'] = details['HostConfig']
     new_container = await docker.containers.create_or_replace(
@@ -341,7 +341,7 @@ def build_update_function(delay: int, validity_threshold_seconds: int):
         now = datetime.now()
         if image not in last_pull_times or (now - last_pull_times[image]).total_seconds() > validity_threshold_seconds:
             logging.info(f"Pulling image {image}...")
-            await docker.images.pull(image)  # Assuming docker.images.pull is an awaitable operation
+            await docker.images.pull(image)  
             logging.info(f"Image {image} pulled.")
             last_pull_times[image] = now
             return True
@@ -398,16 +398,17 @@ def build_updater():
     else:                                                                       
         module_digest_map = {}                                                  
     async def enforce_versioning(client):                                        
-        logging.info("Enforcing versioning")                                    
-        nonlocal module_digest_map                                               
-        containers_to_watch = await retrieve_list_of_containers_to_watch(client)
-        containers_and_images = await images_of_containers(containers_to_watch)  
-        images = [img for img in containers_and_images]                          
-        logging.info(f"Looking at {len(images)} images")                        
-        latest_digests = await get_digests_for_imgs(images)  
+        nonlocal module_digest_map 
 
-        for container, img in containers_and_images:                            
-            latest_digest = latest_digests[img]                                 
+        logging.info("Enforcing versioning") 
+        containers_to_watch = await retrieve_list_of_containers_to_watch(client)
+        containers_and_images = await images_of_containers(containers_to_watch) 
+        images = [img for img in containers_and_images] 
+        logging.info(f"Looking at {len(images)} images") 
+        latest_digests = await get_digests_for_imgs(images) 
+
+        for container, img in containers_and_images: 
+            latest_digest = latest_digests[img] 
             current_digest = module_digest_map.get(img, None)
             logging.info(
                 f"Latest digest for {img}: `{latest_digest}`"
@@ -416,13 +417,13 @@ def build_updater():
                 f"Previous digest for {img}: `{current_digest}`"
             )
             if current_digest is None or current_digest != latest_digest:
-                logging.info(f"Updating {img}")
+                logging.info(f"DETECTED DIGEST CHANGE FOR {img}")
                 module_digest_map[img] = latest_digest
-                logging.info(f"Scheduling an update for {img}")                 
+                logging.info(f"Scheduling an update for {img}")
                 await schedule_update(container, img, module_digest_map)
 
-        logging.info("Versioning loop complete")                                
-    return enforce_versioning 
+        logging.info("Versioning loop complete") 
+    return enforce_versioning
 enforce_versioning = build_updater()
 
 async def update_task(app):
