@@ -266,18 +266,19 @@ async def update_orchestrator(
     original_configuration = details["Config"]
     
     new_configuration = dict(original_configuration)
-    new_configuration['HostConfig'] = details['HostConfig']
-    new_configuration['HostConfig']['PortBindings'] = {} # ports are unique resources
-    new_configuration['Env'].append(
+    new_configuration["HostConfig"] = details["HostConfig"]
+    """ports are unique resources, we do not pass them on the temporary container""" 
+    new_configuration["HostConfig"]["PortBindings"] = {}
+    new_configuration["Env"].append(
         f"MODULE_DIGEST_MAP={json.dumps(module_digest_map)}"
     )
-    new_configuration['Env'].append(
+    new_configuration["Env"].append(
         f"LAST_PULL_TIMES={json.dumps(last_pull_times, default=datetime_serializer)}"
     )
-    new_configuration['Env'].append(
+    new_configuration["Env"].append(
         f"CLOSE_CONTAINER_ID={original_container.id}"
     )
-    new_configuration['Env'].append(
+    new_configuration["Env"].append(
         f"NEW_CONTAINER_HOST_CONFIG={json.dumps(details['HostConfig'])}"
     )
 
@@ -339,29 +340,48 @@ def build_update_function(delay: int, validity_threshold_seconds: int):
     """
     images_to_update = {}
     last_pull_times = json.loads(
-        os.getenv('LAST_PULL_TIMES', '{}'),
+        os.getenv("LAST_PULL_TIMES", "{}"),
         object_hook=datetime_deserializer
     )
-    logging.info(f"LAST_PULL_TIMES IS  {json.dumps(last_pull_times, indent=4, default=datetime_serializer)}")
+    logging.info(
+        f"LAST_PULL_TIMES IS  {json.dumps(last_pull_times, indent=4, default=datetime_serializer)}"
+    )
 
     async def pull_image_if_needed(docker, image):
         """Pulls a Docker image if it hasn't been pulled recently."""
         now = datetime.now()
         if image not in last_pull_times or (now - last_pull_times[image]).total_seconds() > validity_threshold_seconds:
+            existing_sha = ""
+            try:
+                existing_image_info = docker.images.get(image)
+                existing_sha = existing_image_info["Id"]
+            except:
+                logging.info("Image was not localy existing")
             logging.info(f"Pulling image {image}...")
-            await docker.images.pull(image)  
+            await docker.images.pull(image)
+            new_image_info = docker.images.get(image)
+            new_sha = new_image_info["Id"]
             logging.info(f"Image {image} pulled.")
             last_pull_times[image] = now
-            return True
-        logging.info(f"Image {image} pull skipped due to recent pull.")
+            logging.info(f"previous image sha : {existing_sha}")
+            logging.info(f"new image sha : {new_sha}")
+            logging.info(f"triggered recreation : {existing_sha == new_sha}")
+            return existing_sha == new_sha
+        logging.info(
+            f"Image {image} pull skipped due to recent pull."
+        )
         return False
 
-    async def update_containers(docker, image, containers, module_digest_map):
+    async def update_containers(
+        docker, image, containers, module_digest_map
+    ):
         """Updates all containers for a given image."""
         for container in containers:
             # Delay before updating the next container to avoid simultaneous downtime
             await asyncio.sleep(delay)
-            await recreate_container(docker, container, module_digest_map, last_pull_times)
+            await recreate_container(
+                docker, container, module_digest_map, last_pull_times
+            )
 
     async def handle_image_update(image, module_digest_map):
         """Handles updating of containers for a specific image."""
@@ -374,7 +394,7 @@ def build_update_function(delay: int, validity_threshold_seconds: int):
             pulled = await pull_image_if_needed(docker, image)
             if pulled:
                 logging.info(
-                    f"\t - Image have been pulled, triggering update for {[container.id for container in containers]}"
+                    f"\t - Image change detected, update on {[container.id for container in containers]}"
                 )
                 await update_containers(
                     docker, image, containers, module_digest_map
@@ -383,8 +403,8 @@ def build_update_function(delay: int, validity_threshold_seconds: int):
     async def schedule_update(container, image: str, module_digest_map):
         """
         Schedules an update for a container, ensuring that for each unique image,
-        the pull operation is performed only once, followed by updates to all containers
-        using that image.
+        the pull operation is performed only once, followed by updates to all
+        containers using that image.
         """
         if image not in images_to_update:
             images_to_update[image] = [container]
@@ -412,15 +432,24 @@ def digests_are_equal(current_digest, latest_digest):
             return False
     return True
 
-def build_updater():                                                            
-    preloaded_module_digest_map = os.getenv('MODULE_DIGEST_MAP', '')            
-    if preloaded_module_digest_map != '':                                       
-        module_digest_map = json.loads(preloaded_module_digest_map)             
-    else:                                                                       
-        module_digest_map = {}                                                  
-    async def enforce_versioning(client):                                        
-        nonlocal module_digest_map 
+def build_updater():
+    """
+    The module digest_map is
+        [image_name] => image_digest_on_docker_hub
+    """
+    preloaded_module_digest_map = os.getenv("MODULE_DIGEST_MAP", "")
+    if preloaded_module_digest_map != "":
+        module_digest_map = json.loads(preloaded_module_digest_map)
+    else:
+        module_digest_map = {}
 
+    async def enforce_versioning(client):
+        """
+        For each container with `network.exorde.monitor=true` we retrieve their 
+        image name and monitor the version by pulling the docker-hub digest
+        periodicaly and triggering an update as soon as a new digest is retrieved.
+        """
+        nonlocal module_digest_map 
         logging.info("Enforcing versioning") 
         containers_to_watch = await retrieve_list_of_containers_to_watch(client)
         containers_and_images = await images_of_containers(containers_to_watch) 
@@ -447,23 +476,18 @@ def build_updater():
     return enforce_versioning
 enforce_versioning = build_updater()
 
+
 async def update_task(app):
     """
-    For each container with `network.exorde.monitor=true` we retrieve their 
-    image name and monitor the version by pulling the docker-hub digest
-    periodicaly and triggering an update as soon as a new digest is retrieved.
-
-    note: a weakness of this algorith is that it will not be able to determin
-    if an image is out-of-date ; launching an out-of-date client would not be
-    managed by this procedure.
-
-    It is therfor required to trigger an update on first-run.
+    Forever running task that make sure to update the client
     """
     client = Docker()        
     while True:
         logging.info("Update task")
-
-        await enforce_versioning(client)
+        try:
+            await enforce_versioning(client)
+        except:
+            logging.exception("An error occured while updating")
         await asyncio.sleep(
             int(os.getenv("UPDATE_REFRESH_TIME", 5*60))
         ) # default to 5min (same as watchtower)

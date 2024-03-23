@@ -85,3 +85,10 @@ async def test_update():
     # enforce_versioning should recreate containers after a pull
     containers_to_watch = await retrieve_list_of_containers_to_watch(client)
     assert len(containers_to_watch) == 2
+
+@pytest.mark.asyncio
+async def test_get_image_info():
+    client = Docker()
+    image = "exordelabs/orchestrator"
+    image_instance = await client.images.get(image)
+    logging.info(json.dumps(image_instance, indent=4))
