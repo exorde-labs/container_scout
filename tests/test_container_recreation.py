@@ -62,7 +62,7 @@ async def test_container_recreation(container_cleanup):
         filters={'label': ["network.exorde.test=true"] }, all=True
     )
     assert len(containers) == 1
-    await recreate_container(client, container)
+    await recreate_container(client, container, {}, {})
 
     containers = await client.containers.list(
         filters={'label': ["network.exorde.test=true"] }, all=True

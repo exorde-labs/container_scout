@@ -41,8 +41,8 @@ async def get_image_manifest(
             if response.status == 200:
                 data = await response.json()
                 result: list[str] = []
-                for manifest in data.get('manifests', []):
-                    if manifest.get('annotations', None):
+                for manifest in data.get("manifests", []):
+                    if manifest.get("annotations", None):
                         r: str = manifest["annotations"]["vnd.docker.reference.digest"]
                         result.append(r)
                 return image_name, result
@@ -62,9 +62,9 @@ async def get_local_image_sha(
     async with Docker() as docker:
         images = await docker.images.list()
         for image in images:
-            if image['RepoTags'] is None:  # Handle images without RepoTags
+            if image["RepoTags"] is None:  # Handle images without RepoTags
                 continue
-            if f"{image_name}:{tag}" in image['RepoTags']:
+            if f"{image_name}:{tag}" in image["RepoTags"]:
                 return image
         return None
 
@@ -75,7 +75,7 @@ async def retrieve_list_of_containers_to_watch(client):
 
 async def get_image_from_container(container):
     details = await container.show()
-    return container, details['Config']['Image']
+    return container, details["Config"]["Image"]
 
 async def images_of_containers(containers):
     """
@@ -121,7 +121,7 @@ async def get_digests_for_imgs(imgs: list[str]):
     return {img: digest for img, digest in filtered_results}
 
 
-async def close_temporary_container(app):
+async def close_temporary_container(__app__):
     """
     STEP 2 OF ORCHESTRATOR UPDATE
     (this runs inside the new orchestrator container)
@@ -138,7 +138,7 @@ async def close_temporary_container(app):
         logging.info("Could not find the container")
     await docker.close()
 
-async def orchestrator_update_step_one(app):
+async def orchestrator_update_step_one(__app__):
     """
     STEP 1 OF ORCHESTRATOR UPDATE
     (this runs inside a container called orchestrator-*-temp)
@@ -168,9 +168,9 @@ async def orchestrator_update_step_one(app):
     )
     details = await existing_container.show()
     config = dict(details['Config'])
-    config['HostConfig'] = new_container_host_config
-    config['Env'].append(f"LAST_PULL_TIMES={os.getenv('LAST_PULL_TIMES')}")
-    config['Env'].append(f"MODULE_DIGEST_MAP={os.getenv('MODULE_DIGEST_MAP')}")
+    config["HostConfig"] = new_container_host_config
+    config["Env"].append(f"LAST_PULL_TIMES={os.getenv('LAST_PULL_TIMES')}")
+    config["Env"].append(f"MODULE_DIGEST_MAP={os.getenv('MODULE_DIGEST_MAP')}")
     
     """
      -> we cannot know `container_id` before the creation so we cannot get it 
@@ -182,7 +182,7 @@ async def orchestrator_update_step_one(app):
         "label": ["network.exorde.monitor=true"]
     })
 
-    self_id = ''
+    self_id = ""
     for container in containers:
         logging.info(f"Looking at {container.id}")
         container_info = await container.show()
@@ -191,7 +191,7 @@ async def orchestrator_update_step_one(app):
         if "orchestrator" in name and "temp" in name:
             logging.info(f"Found container id !")
             self_id = container.id
-    assert self_id != ''
+    assert self_id != ""
     logging.info(f"Found self container id : I'm {self_id} !")
 
     logging.info("Closing original container")    
@@ -202,10 +202,10 @@ async def orchestrator_update_step_one(app):
         logging.exception("Could not stop and delete the container")
 
     # this is identifying SELF (or the temp container)
-    config['Env'].append(f"FINAL_CLOSE_CONTAINER_ID={self_id}")
+    config["Env"].append(f"FINAL_CLOSE_CONTAINER_ID={self_id}")
     logging.info(f"Creating new container")
     logging.info("Here's it's env")
-    logging.info(json.dumps(config['Env'], indent=4))
+    logging.info(json.dumps(config["Env"], indent=4))
     new_container = await docker.containers.create_or_replace(
         name=details["Name"][1:].replace("-temp", ""),
         config=config
@@ -359,7 +359,7 @@ def build_update_function(delay: int, validity_threshold_seconds: int):
                 logging.info("Image was not localy existing")
             logging.info(f"Pulling image {image}...")
             await docker.images.pull(image)
-            new_image_info = docker.images.get(image)
+            new_image_info = await docker.images.get(image)
             new_sha = new_image_info["Id"]
             logging.info(f"Image {image} pulled.")
             last_pull_times[image] = now
@@ -373,7 +373,7 @@ def build_update_function(delay: int, validity_threshold_seconds: int):
         return False
 
     async def update_containers(
-        docker, image, containers, module_digest_map
+        docker, containers, module_digest_map
     ):
         """Updates all containers for a given image."""
         for container in containers:
@@ -391,13 +391,13 @@ def build_update_function(delay: int, validity_threshold_seconds: int):
             containers = images_to_update[image]
             logging.info(f"Running handle_image_update for {image}")
             logging.info(f"\t - containers are: {[container.id for container in containers]}")
-            pulled = await pull_image_if_needed(docker, image)
-            if pulled:
+            image_has_changed = await pull_image_if_needed(docker, image)
+            if image_has_changed:
                 logging.info(
                     f"\t - Image change detected, update on {[container.id for container in containers]}"
                 )
                 await update_containers(
-                    docker, image, containers, module_digest_map
+                    docker, containers, module_digest_map
                 )
 
     async def schedule_update(container, image: str, module_digest_map):
@@ -477,7 +477,7 @@ def build_updater():
 enforce_versioning = build_updater()
 
 
-async def update_task(app):
+async def update_task(__app__):
     """
     Forever running task that make sure to update the client
     """

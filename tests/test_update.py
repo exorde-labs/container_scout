@@ -1,5 +1,5 @@
 
-import logging
+import logging, asyncio
 from aiodocker import Docker
 import json, logging, pytest
 
@@ -54,6 +54,9 @@ async def test_get_container_details():
 @pytest.mark.asyncio
 async def test_update():
     client = Docker()
+    containers_to_close = await retrieve_list_of_containers_to_watch(client)
+    for container in containers_to_close:
+        await container.delete(force=True)
     image = "exordelabs/orchestrator"
     container = await client.containers.create_or_replace(
         name="container-for-exordelabs-test",
@@ -82,6 +85,7 @@ async def test_update():
 
     await enforce_versioning(client)
 
+    await asyncio.sleep(60)
     # enforce_versioning should recreate containers after a pull
     containers_to_watch = await retrieve_list_of_containers_to_watch(client)
     assert len(containers_to_watch) == 2
