@@ -365,8 +365,8 @@ def build_update_function(delay: int, validity_threshold_seconds: int):
             last_pull_times[image] = now
             logging.info(f"previous image sha : {existing_sha}")
             logging.info(f"new image sha : {new_sha}")
-            logging.info(f"triggered recreation : {existing_sha == new_sha}")
-            return existing_sha == new_sha
+            logging.info(f"triggered recreation : {existing_sha != new_sha}")
+            return existing_sha != new_sha
         logging.info(
             f"Image {image} pull skipped due to recent pull."
         )
