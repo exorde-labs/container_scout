@@ -1,5 +1,4 @@
 import asyncio, logging, os, datetime
-import docker
 from aiodocker import Docker
 from aiohttp import web
 from get_spot_ponderation import get_ponderation
@@ -9,11 +8,14 @@ monitoring_label = "network.exorde.monitor"
 
 async def get_self_container(client):
     containers = await client.containers.list(
-        filters={"label": ["network.exorde.monitor=true"]}
+        filters={"label": ["network.exorde.service=orchestrator"]}
     )
-    # this assumes the correct label and that this is not happening while
-    # in an update process 
-    # ( where multiple containers might correctly match this label )
+    """
+    this assumes 
+        - the correct label
+        - it is not happening while in an update process 
+            - > multiple containers might correctly match this label
+    """
     return containers[0]
 
 
@@ -49,6 +51,7 @@ async def reconcile_containers(desired_state):
 
     self_container = await get_self_container(client)
     self_container_details = await self_container.show()
+
     # Reconcile containers
     for image, desired_count in desired_state.items():
         prefixed_image = f"{image_prefix}/spot{image}"
@@ -70,7 +73,10 @@ async def reconcile_containers(desired_state):
                         },
                         "Env": [
                             f"ORCHESTRATOR_NAME={self_container_details['Name']}"
-                        ]
+                        ],
+                        "HostConfig": {
+                            "NetworkMode": "exorde-network"
+                        }
                     },
                     name=f"{image_prefix}_{image}_{current_count + _}"
                 )
@@ -125,21 +131,22 @@ async def get_desired_state() -> dict[str, int]:
     }
     return adjusted_module_containers
 
-async def delete_all_managed_containers(app):
+async def delete_all_managed_containers(__app__):
     """
     In order to sanitize the state, we delete every container that are managed
     by the orchestration label
     """
     logging.info("Deleting all containers managed by our label...")
-    client = docker.from_env()
-    managed_containers = client.containers.list(filters={'label': orchestration_label}, all=True)
+    client = Docker()
+    managed_containers = await client.containers.list(filters={'label': orchestration_label})
     logging.info('Shutting down managed containers')
     for container in managed_containers:
         try:
-            container.remove(force=True)
-            logging.info(f"Deleted container: {container.short_id}")
+            await container.delete(force=True)
+            logging.info(f"Deleted container: {container.id}")
         except Exception as e:
-            logging.error(f"Failed to delete container: {container.short_id}, Error: {e}")
+            logging.error(f"Failed to delete container: {container.id}, Error: {e}")
+    await client.close()
 
 async def orchestration_task(app):
     refresh_time = int(os.getenv("SPOTTERS_TIME_WINDOW", "3600"))  # Refresh time in seconds
