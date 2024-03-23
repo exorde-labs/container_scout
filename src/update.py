@@ -353,7 +353,7 @@ def build_update_function(delay: int, validity_threshold_seconds: int):
         if image not in last_pull_times or (now - last_pull_times[image]).total_seconds() > validity_threshold_seconds:
             existing_sha = ""
             try:
-                existing_image_info = docker.images.get(image)
+                existing_image_info = await docker.images.get(image)
                 existing_sha = existing_image_info["Id"]
             except:
                 logging.info("Image was not localy existing")
