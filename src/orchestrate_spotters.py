@@ -3,7 +3,6 @@ from aiodocker import Docker
 from aiohttp import web
 from get_spot_ponderation import get_ponderation
 
-orchestration_label = "network.exorde.orchestrate"
 monitoring_label = "network.exorde.monitor"
 
 async def get_self_container(client):
@@ -132,16 +131,13 @@ async def get_desired_state() -> dict[str, int]:
     return adjusted_module_containers
 
 async def delete_all_managed_containers(__app__):
-    """
-    In order to sanitize the state, we delete every container that are managed
-    by the orchestration label
-    """
+    """In order to sanitize the state, we delete every managed `spotter`"""
     logging.info("Deleting all containers managed by our label...")
     client = Docker()
     managed_containers = await client.containers.list(
-        filters={'label': f"{orchestration_label}=true"}
+        filters={'label': f"exorde.network.orchestrate=spotter"}
     )
-    logging.info('Shutting down managed containers')
+    logging.info('Shutting down managed spotter containers')
     for container in managed_containers:
         try:
             await container.delete(force=True)
