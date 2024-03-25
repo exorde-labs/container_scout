@@ -22,34 +22,6 @@ async def get_docker_hub_token(
             data = await response.json()
             return data["token"]
 
-
-async def get_image_manifest(
-    image_name: str, tag: str = "latest"
-) -> Union[tuple[str, list[str]], None]:
-    # Step 1: Separate any tag included in the image name
-    if ':' in image_name:
-        image_name = image_name.split(':')[0]
-
-    token = await get_docker_hub_token(image_name)
-    headers = {
-        "Accept": "application/vnd.docker.distribution.manifest.v2+json",
-        "Authorization": f"Bearer {token}"
-    }
-    url = f"https://registry-1.docker.io/v2/{image_name}/manifests/{tag}"
-    async with ClientSession() as session:
-        async with session.get(url, headers=headers) as response:
-            if response.status == 200:
-                data = await response.json()
-                result: list[str] = []
-                for manifest in data.get("manifests", []):
-                    if manifest.get("annotations", None):
-                        r: str = manifest["annotations"]["vnd.docker.reference.digest"]
-                        result.append(r)
-                return image_name, result
-            else:
-                raise Exception(f"HTTP Error {response.status}: {response.reason}")
-
-
 async def get_local_image_sha(
     image_name: str, tag: str = "latest"
 ) -> Union[list[str], None]:
@@ -101,15 +73,47 @@ async def images_of_containers(containers):
     
     return reordered_pairs
 
+
+async def get_image_manifest(
+    image_name: str, tag: str = "latest"
+) -> Union[tuple[str, list[str]], None]:
+    if ':' in image_name:
+        image_name = image_name.split(':')[0]
+    logging.info(f"get_image_manifest image_name is {image_name}") 
+    token = await get_docker_hub_token(image_name)
+    logging.info("get_image_manifest token is {token}")
+    headers = {
+        "Accept": "application/vnd.docker.distribution.manifest.v2+json",
+        "Authorization": f"Bearer {token}"
+    }
+    url = f"https://registry-1.docker.io/v2/{image_name}/manifests/{tag}"
+    async with ClientSession() as session:
+        async with session.get(url, headers=headers) as response:
+            if response.status == 200:
+                data = await response.json()
+                result: list[str] = []
+                for manifest in data.get("manifests", []):
+                    if manifest.get("annotations", None):
+                        r: str = manifest["annotations"]["vnd.docker.reference.digest"]
+                        result.append(r)
+                return image_name, result
+            else:
+                raise Exception(f"HTTP Error {response.status}: {response.reason}")
+
+
 async def get_digests_for_imgs(imgs: list[str]):
     async def safe_get_image_manifest(image):
         logging.info(f"Getting digest for {image}")
-        try:
-            result = await get_image_manifest(image)
-            return image, result
-        except Exception as e:
-            logging.exception(f"getting manifest for '{image}': {e}")
-            return image, None
+        i = 0
+        while True:
+            if i < 10:
+                i += 1
+            try:
+                result = await get_image_manifest(image)
+                return image, result
+            except Exception as e:
+                logging.exception(f"getting manifest for '{image}': {e}, retry in {i**i} s")
+                await asyncio.sleep(i**i)
 
     results = await asyncio.gather(
         *[safe_get_image_manifest(image) for __container__, image in imgs]
