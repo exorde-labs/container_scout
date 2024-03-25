@@ -132,14 +132,19 @@ async def get_desired_state() -> dict[str, int]:
 
 async def delete_all_managed_containers(__app__):
     """In order to sanitize the state, we delete every managed `spotter`"""
-    logging.info("Deleting all containers managed by our label...")
+    logging.info("Running spotter orchestration shutdown")
     client = Docker()
     managed_containers = await client.containers.list(
         filters={'label': [f"exorde.network.orchestrate=spotter"]}
     )
-    logging.info('Shutting down managed spotter containers')
+    logging.info(
+        f"-\t {len(managed_containers)} managed spotter containers"
+    )
     for container in managed_containers:
+        details = await container.show()
+        name = details['Name']
         try:
+            logging.info(f"Shutting down {container.id} ({name})")
             await container.delete(force=True)
             logging.info(f"Deleted container: {container.id}")
         except Exception as e:
