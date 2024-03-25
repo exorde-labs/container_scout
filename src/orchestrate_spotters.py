@@ -138,7 +138,9 @@ async def delete_all_managed_containers(__app__):
     """
     logging.info("Deleting all containers managed by our label...")
     client = Docker()
-    managed_containers = await client.containers.list(filters={'label': orchestration_label})
+    managed_containers = await client.containers.list(
+        filters={'label': f"{orchestration_label}=true"}
+    )
     logging.info('Shutting down managed containers')
     for container in managed_containers:
         try:
