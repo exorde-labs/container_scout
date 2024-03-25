@@ -135,7 +135,7 @@ async def delete_all_managed_containers(__app__):
     logging.info("Deleting all containers managed by our label...")
     client = Docker()
     managed_containers = await client.containers.list(
-        filters={'label': f"exorde.network.orchestrate=spotter"}
+        filters={'label': [f"exorde.network.orchestrate=spotter"]}
     )
     logging.info('Shutting down managed spotter containers')
     for container in managed_containers:
