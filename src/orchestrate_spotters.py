@@ -71,7 +71,7 @@ async def reconcile_containers(desired_state):
                             "network.exorde.monitor": "true"
                         },
                         "Env": [
-                            f"ORCHESTRATOR_NAME={self_container_details['Name']}"
+                            f"ORCHESTRATOR_NAME={self_container_details['Name'][1:]}"
                         ],
                         "HostConfig": {
                             "NetworkMode": "exorde-network"
