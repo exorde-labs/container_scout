@@ -4,11 +4,11 @@ on:
   workflow_dispatch:
   push:
     branches:
-      - 'alpha'
+      - 'main'
 
 jobs:
   build-deploy:
-    name: Build and Publish (on production)
+    name: Build and Publish (on alpha)
     runs-on: ubuntu-latest
     env:
       SLACK_WEBHOOK_URL: ${{ secrets.SLACK_WEBHOOK_URL }}
