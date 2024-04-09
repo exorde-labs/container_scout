@@ -40,7 +40,7 @@ CLOSE_CONTAINER_ID = os.getenv("CLOSE_CONTAINER_ID", False)
 if CLOSE_CONTAINER_ID:
     app.on_startup.append(orchestrator_update_step_one)
 
-if os.getenv("AUTOMATIC_UPDATE", True) and not CLOSE_CONTAINER_ID:
+if os.getenv("AUTOMATIC_UPDATE", True) != "false"  and not CLOSE_CONTAINER_ID:
     app.on_startup.append(start_update_task)
     logging.info("Will pull images and update out-of-date containers")
 else:
@@ -50,8 +50,6 @@ FINAL_CLOSE_CONTAINER_ID = os.getenv("FINAL_CLOSE_CONTAINER_ID", False)
 if FINAL_CLOSE_CONTAINER_ID:
     logging.info(f"Will close {FINAL_CLOSE_CONTAINER_ID}")
     app.on_startup.append(close_temporary_container)
-
-# AUTOMATIC UPDATE END 
 
 # SPOTTERS ORCHESTRATION
 SPOTTERS_AMOUNT = os.getenv("SPOTTERS_AMOUNT", 0)

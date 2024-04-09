@@ -18,6 +18,23 @@ async def get_self_container(client):
     return containers[0]
 
 
+def get_env_forward():
+    """
+    Some env variable are to be forwarded from the orchestrator to the different
+    spotters. This allows twitter auth to be passed trough for example.
+    """
+    forward_variable_key_list: list[str] = [
+        "SCWEET_EMAIL",
+        "SCWEET_USERNAME",
+        "SCWEET_PASSWORD"
+    ]
+    variables: list[str] = []
+    for key in forward_variable_key_list:
+        var = os.getenv(key, 'null')
+        variables.append(f"{key}={var}")
+    return variables
+
+
 image_prefix = "exordelabs"  # Prefix to convert module names to image names
 async def reconcile_containers(desired_state):
     """
@@ -63,6 +80,10 @@ async def reconcile_containers(desired_state):
                 logging.info(
                     f"Starting new container for image {prefixed_image}..."
                 )
+                env_forwarding = get_env_forward()
+                env_forwarding.append(
+                    f"ORCHESTRATOR_NAME={self_container_details['Name'][1:]}"
+                )
                 container = await client.containers.create_or_replace(
                     config={
                         "Image": prefixed_image, 
@@ -70,9 +91,7 @@ async def reconcile_containers(desired_state):
                             "network.exorde.orchestrate": "spotter",
                             "network.exorde.monitor": "true"
                         },
-                        "Env": [
-                            f"ORCHESTRATOR_NAME={self_container_details['Name'][1:]}"
-                        ],
+                        "Env": env_forwarding,
                         "HostConfig": {
                             "NetworkMode": "exorde-network"
                         }
@@ -84,7 +103,9 @@ async def reconcile_containers(desired_state):
             # Stop and remove extra containers
             extra_containers = current_containers[desired_count:]
             for container in extra_containers:
-                logging.info(f"Stopping and removing container {container.id} for image {prefixed_image}...")
+                logging.info(
+                    f"Stopping and removing container {container.id} for image {prefixed_image}..."
+                )
                 await container.stop()
                 await container.delete()
 
@@ -96,7 +117,9 @@ async def get_desired_state() -> dict[str, int]:
     ponderation = await get_ponderation()
     weights = ponderation.weights
     amount_of_containers = int(os.getenv("SPOTTERS_AMOUNT", 0))
-    logging.info(f"Amount of containers to manage : {amount_of_containers}")
+    logging.info(
+        f"Amount of containers to manage : {amount_of_containers}"
+    )
 
     # Calculate the total weight
     total_weight = sum(weights.values())
@@ -105,7 +128,9 @@ async def get_desired_state() -> dict[str, int]:
     module_containers_intended = {
         module: (weight / total_weight) * amount_of_containers for module, weight in weights.items()
     }
-    logging.info(f"module_containers_intended : {module_containers_intended}")
+    logging.info(
+        f"module_containers_intended : {module_containers_intended}"
+    )
 
     # Adjust for rounding issues to ensure the sum of allocated containers matches the amount_of_containers exactly
     # This can be done by distributing rounding errors
@@ -130,6 +155,7 @@ async def get_desired_state() -> dict[str, int]:
     }
     return adjusted_module_containers
 
+
 async def delete_all_managed_containers(__app__):
     """In order to sanitize the state, we delete every managed `spotter`"""
     logging.info("Running spotter orchestration shutdown")
@@ -150,6 +176,7 @@ async def delete_all_managed_containers(__app__):
         except Exception as e:
             logging.error(f"Failed to delete container: {container.id}, Error: {e}")
     await client.close()
+
 
 async def orchestration_task(app):
     refresh_time = int(os.getenv("SPOTTERS_TIME_WINDOW", "3600"))  # Refresh time in seconds
